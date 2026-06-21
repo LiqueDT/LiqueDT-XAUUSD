@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">LiqueDT candlestick logo</title>
+  <desc id="desc">Four white and grey market candles followed by a blue liquidity full-stop.</desc>
+  <rect x="1" y="1" width="62" height="62" rx="14" fill="#0d131a" stroke="#29323d" stroke-width="2"/>
+
+  <path d="M14 23v31M25 16v35M36 20v27M47 9v35" stroke="#dce4ec" stroke-width="1.5" stroke-linecap="round"/>
+  <rect x="10" y="31" width="8" height="15" rx="1.4" fill="#7f8a96"/>
+  <rect x="21" y="24" width="8" height="17" rx="1.4" fill="#f4f7fa"/>
+  <rect x="32" y="27" width="8" height="11" rx="1.4" fill="#8f9aa6"/>
+  <rect x="43" y="16" width="8" height="16" rx="1.4" fill="#ffffff"/>
+  <circle cx="54" cy="49" r="3.5" fill="#3b82f6"/>
+</svg>

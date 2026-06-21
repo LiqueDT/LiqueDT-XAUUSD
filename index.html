@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1016">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="LiqueDT">
+  <meta name="description" content="LiqueDT is a live XAUUSD market context companion for sessions, related markets, economic events and news.">
+  <title>LiqueDT — XAUUSD market context</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to market overview</a>
+
+  <header class="app-header">
+    <a class="brand" href="#overview" aria-label="LiqueDT home">
+      <img src="icon.svg" alt="" width="40" height="40">
+      <span><strong>LiqueDT<span>.</span></strong><small>XAUUSD CONTEXT</small></span>
+    </a>
+
+    <nav class="desktop-nav" aria-label="Primary navigation">
+      <a class="active" href="#overview">Overview</a>
+      <a href="#markets">Markets</a>
+      <a href="#calendar">Calendar</a>
+      <a href="#news">News</a>
+    </nav>
+
+    <div class="market-header" aria-live="polite">
+      <div class="market-header-status">
+        <span id="marketDot" class="market-dot"></span>
+        <span><strong id="marketState">Checking market</strong><small id="marketStateDetail">Indicative OTC hours</small></span>
+      </div>
+      <div class="header-countdown"><strong id="marketCountdown">--:--:--</strong><small id="marketCountdownLabel">Next change</small></div>
+      <div class="sg-clock"><strong id="sgTime">--:--:--</strong><small id="sgDate">Singapore</small></div>
+    </div>
+  </header>
+
+  <div class="ticker-shell" aria-label="Live market ticker">
+    <div id="tickerWidget" class="tradingview-widget-container"></div>
+  </div>
+
+  <section class="data-health" aria-label="Live data status" aria-live="polite">
+    <div class="health-summary">
+      <span id="dataHealthDot" class="health-dot checking"></span>
+      <span><strong id="dataHealthSummary">Checking live data</strong><small id="dataFreshness">Connecting sources…</small></span>
+    </div>
+    <div class="health-item"><span>Charts</span><strong id="chartsHealth" class="checking">Checking</strong></div>
+    <div class="health-item"><span>News</span><strong id="newsHealth" class="checking">Checking</strong></div>
+    <div class="health-item"><span>Calendar</span><strong id="calendarHealth" class="checking">Checking</strong></div>
+    <div class="health-item last-check"><span>Last checked</span><strong id="lastChecked">—</strong></div>
+    <button id="refreshData" class="quiet-button" type="button" aria-label="Refresh all market data">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5M4 13a8.1 8.1 0 0 0 15.5 2m.5 5v-5h-5"/></svg>
+      Refresh
+    </button>
+  </section>
+
+  <main id="main">
+    <section id="overview" class="hero section-anchor">
+      <div class="hero-copy">
+        <p class="eyebrow"><span class="live-pip"></span> XAUUSD COMPANION</p>
+        <h1>Market overview</h1>
+        <p class="hero-lede">Sessions, related markets, economic events and headlines—aligned to Singapore time.</p>
+        <div class="overview-tags"><span>NO EXECUTION</span><span>CONTEXT ONLY</span><span>SGT</span></div>
+      </div>
+
+      <article class="pulse-card" aria-labelledby="pulseTitle">
+        <div class="pulse-topline">
+          <p class="eyebrow">NEWS NARRATIVE</p>
+          <span id="pulseStatus" class="source-status waiting">CONNECTING</span>
+        </div>
+        <div class="pulse-gauge" aria-hidden="true"><span id="pulseNeedle"></span></div>
+        <div class="pulse-labels"><span>Bearish</span><span>Balanced</span><span>Bullish</span></div>
+        <h2 id="pulseTitle">Waiting for live headlines</h2>
+        <p id="pulseSummary">LiqueDT scores gold-sensitive language across recent headlines. It describes the current narrative; it does not predict the next candle.</p>
+        <div class="pulse-factors" id="pulseFactors">
+          <span>Dollar</span><span>Rates</span><span>Risk</span>
+        </div>
+        <p class="micro-disclaimer">Experimental context only · never a trading signal</p>
+      </article>
+    </section>
+
+    <section class="session-section" aria-labelledby="sessionsTitle">
+      <div class="section-heading compact">
+        <div><p class="eyebrow">MARKET WINDOWS · SGT</p><h2 id="sessionsTitle">Where liquidity is awake</h2></div>
+        <p>Session times follow regional daylight saving automatically.</p>
+      </div>
+      <div id="sessionGrid" class="session-grid">
+        <article class="session-card" data-session="asia">
+          <div class="session-number">01</div>
+          <div><span class="session-status">CHECKING</span><h3>Asia</h3><p>08:00–16:00 SGT</p></div>
+          <div class="session-timer"><strong>--:--:--</strong><small>Next change</small></div>
+        </article>
+        <article class="session-card" data-session="london">
+          <div class="session-number">02</div>
+          <div><span class="session-status">CHECKING</span><h3>London</h3><p class="session-local-time">Local market hours</p></div>
+          <div class="session-timer"><strong>--:--:--</strong><small>Next change</small></div>
+        </article>
+        <article class="session-card" data-session="new-york">
+          <div class="session-number">03</div>
+          <div><span class="session-status">CHECKING</span><h3>New York</h3><p class="session-local-time">Local market hours</p></div>
+          <div class="session-timer"><strong>--:--:--</strong><small>Next change</small></div>
+        </article>
+      </div>
+    </section>
+
+    <section id="markets" class="market-section section-anchor" aria-labelledby="marketsTitle">
+      <div class="section-heading">
+        <div><p class="eyebrow">CROSS-MARKET LENS</p><h2 id="marketsTitle">The markets around gold</h2></div>
+        <p>Tap a driver to bring its chart into focus. Relationships are contextual, not mechanical.</p>
+      </div>
+
+      <div class="market-layout">
+        <article class="chart-card">
+          <div class="chart-toolbar">
+            <div>
+              <span id="activeMarketTag">PRECIOUS METALS</span>
+              <h3 id="activeMarketName">Gold / U.S. Dollar</h3>
+            </div>
+            <div id="marketTabs" class="market-tabs" role="tablist" aria-label="Chart symbol">
+              <button class="active" type="button" role="tab" aria-selected="true" data-symbol="OANDA:XAUUSD" data-name="Gold / U.S. Dollar" data-tag="PRECIOUS METALS">XAUUSD</button>
+              <button type="button" role="tab" aria-selected="false" data-symbol="CAPITALCOM:DXY" data-name="U.S. Dollar Index" data-tag="CURRENCY · CAPITAL.COM">DXY</button>
+              <button type="button" role="tab" aria-selected="false" data-symbol="TVC:USOIL" data-name="WTI Crude Oil" data-tag="ENERGY">WTI</button>
+              <button type="button" role="tab" aria-selected="false" data-symbol="OANDA:USB10YUSD" data-name="U.S. 10Y Bond Yield" data-tag="RATES · OANDA">US10Y</button>
+            </div>
+          </div>
+          <div id="marketChart" class="market-chart tradingview-widget-container" aria-label="Interactive market chart"></div>
+          <div class="widget-credit">Live chart by <a href="https://www.tradingview.com/" target="_blank" rel="noreferrer">TradingView</a></div>
+        </article>
+
+        <aside class="driver-stack" aria-label="Gold market drivers">
+          <article class="driver-card" data-driver="DXY">
+            <div><span class="driver-icon">$</span><span class="relationship inverse">Usually inverse</span></div>
+            <h3>U.S. dollar</h3>
+            <p>A stronger dollar can make gold more expensive outside the U.S., often pressuring demand.</p>
+            <button type="button" data-open-symbol="CAPITALCOM:DXY">Open DXY chart <span>↗</span></button>
+          </article>
+          <article class="driver-card" data-driver="US10Y">
+            <div><span class="driver-icon">%</span><span class="relationship inverse">Real-yield lens</span></div>
+            <h3>Rates &amp; yields</h3>
+            <p>Rising yields increase the opportunity cost of holding non-yielding gold; falling yields can relieve it.</p>
+            <button type="button" data-open-symbol="OANDA:USB10YUSD">Open US10Y chart <span>↗</span></button>
+          </article>
+          <article class="driver-card" data-driver="WTI">
+            <div><span class="driver-icon">◒</span><span class="relationship contextual">Inflation context</span></div>
+            <h3>Crude oil</h3>
+            <p>Oil can reshape inflation expectations, then feed through to rates, the dollar and gold.</p>
+            <button type="button" data-open-symbol="TVC:USOIL">Open WTI chart <span>↗</span></button>
+          </article>
+        </aside>
+      </div>
+    </section>
+
+    <section id="calendar" class="intel-grid section-anchor" aria-label="Calendar and news">
+      <article class="intel-panel calendar-panel">
+        <div class="panel-heading">
+          <div><p class="eyebrow">LIVE INTELLIGENCE · SGT</p><h2>Economic calendar</h2></div>
+          <span id="calendarStatus" class="source-status waiting">CONNECTING</span>
+        </div>
+        <div id="calendarList" class="calendar-list" aria-live="polite">
+          <div class="loading-row"><span></span><p>Looking for upcoming USD events…</p></div>
+        </div>
+        <div class="panel-footer"><span>Filter: USD · high &amp; medium impact</span><a href="https://www.forexfactory.com/calendar" target="_blank" rel="noreferrer">Full calendar ↗</a></div>
+      </article>
+
+      <article id="news" class="intel-panel news-panel section-anchor">
+        <div class="panel-heading">
+          <div><p class="eyebrow">LIVE INTELLIGENCE · SGT</p><h2>Market news</h2></div>
+          <span id="newsStatus" class="source-status waiting">CONNECTING</span>
+        </div>
+        <div id="newsList" class="news-list" aria-live="polite">
+          <div class="loading-row"><span></span><p>Scanning gold-sensitive headlines…</p></div>
+        </div>
+        <div class="panel-footer"><span>Source attribution shown per story</span><a href="https://www.fxstreet.com/markets/commodities/metals/gold" target="_blank" rel="noreferrer">More gold news ↗</a></div>
+      </article>
+    </section>
+
+    <section class="principle-strip" aria-label="LiqueDT product principles">
+      <p>Built for <strong>awareness</strong>, not execution.</p>
+      <span></span>
+      <p>No order entry. No signals. No promises.</p>
+      <button id="methodButton" class="quiet-button" type="button">How the narrative works</button>
+    </section>
+  </main>
+
+  <footer>
+    <a class="brand footer-brand" href="#overview"><img src="icon.svg" alt="" width="32" height="32"><strong>LiqueDT<span>.</span></strong></a>
+    <p>Liquidity context for XAUUSD · Singapore time everywhere</p>
+    <p>Market hours are indicative and can vary by broker and holiday.</p>
+  </footer>
+
+  <dialog id="methodDialog">
+    <form method="dialog">
+      <button class="dialog-close" aria-label="Close">×</button>
+      <p class="eyebrow">METHODOLOGY</p>
+      <h2>A narrative compass, not a forecast.</h2>
+      <p>LiqueDT scans recent gold-sensitive headlines for language around the dollar, rates, inflation and risk. It assigns a small directional weight, then aggregates the result into bearish, balanced or bullish narrative context.</p>
+      <p>Headlines are incomplete, relationships can invert, and price may already reflect the story. Always read the underlying source. This feature must never be used as a standalone reason to trade.</p>
+      <button class="primary-button" value="close">Understood</button>
+    </form>
+  </dialog>
+
+  <noscript><div class="noscript">LiqueDT needs JavaScript for live clocks, data and charts.</div></noscript>
+  <script src="app.js" defer></script>
+</body>
+</html>
