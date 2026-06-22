@@ -234,22 +234,26 @@ function mountWidget(container, scriptName, config, healthKey = null) {
 }
 
 function mountTicker() {
+  const mobile = window.matchMedia("(max-width: 560px)").matches;
+  const symbols = [
+    { proName: "OANDA:XAUUSD", title: "Gold" },
+    { proName: "CAPITALCOM:DXY", title: "Dollar index" },
+    { proName: "OANDA:USB10YUSD", title: "U.S. 10Y" },
+    { proName: "TVC:USOIL", title: "WTI crude" },
+    { proName: "BINANCE:XAUUSDT.P", title: "XAU / USDT perp" },
+    { proName: "OANDA:XAGUSD", title: "Silver" }
+  ];
   const config = {
-    symbols: [
-      { proName: "OANDA:XAUUSD", title: "Gold" },
-      { proName: "CAPITALCOM:DXY", title: "Dollar index" },
-      { proName: "OANDA:USB10YUSD", title: "U.S. 10Y" },
-      { proName: "TVC:USOIL", title: "WTI crude" },
-      { proName: "BINANCE:XAUUSDT.P", title: "XAU / USDT perp" },
-      { proName: "OANDA:XAGUSD", title: "Silver" }
-    ],
-    showSymbolLogo: true, isTransparent: true, displayMode: "adaptive", colorTheme: "dark", locale: "en"
+    symbols: mobile ? symbols.slice(0, 4) : symbols,
+    showSymbolLogo: true, isTransparent: true, displayMode: mobile ? "regular" : "adaptive", colorTheme: "dark", locale: "en"
   };
   mountWidget($("#tickerWidget"), "embed-widget-ticker-tape.js", config);
-  mountWidget($("#tickerWidgetClone"), "embed-widget-ticker-tape.js", config);
+  if (mobile) $("#tickerWidgetClone").replaceChildren();
+  else mountWidget($("#tickerWidgetClone"), "embed-widget-ticker-tape.js", config);
 }
 
 function mountChart(symbol = activeSymbol) {
+  const compactChart = window.matchMedia("(max-width: 820px)").matches;
   activeSymbol = symbol;
   const meta = widgetSymbols[symbol];
   $("#activeMarketName").textContent = meta.name;
@@ -267,7 +271,7 @@ function mountChart(symbol = activeSymbol) {
     autosize: true, width: "100%", height: "100%", symbol, interval: "15", timezone: "Asia/Singapore", theme: "dark",
     style: "1", locale: "en", backgroundColor: "rgba(16, 23, 31, 1)",
     gridColor: "rgba(226, 232, 240, 0.055)", hide_top_toolbar: false,
-    hide_side_toolbar: false, hide_legend: false, withdateranges: true,
+    hide_side_toolbar: compactChart, hide_legend: false, withdateranges: true,
     allow_symbol_change: false, save_image: false, calendar: false, support_host: "https://www.tradingview.com"
   }, "charts");
 }

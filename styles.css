@@ -288,7 +288,7 @@ dialog p:not(.eyebrow) { color: #aab5c1; font-size: 11px; line-height: 1.75; }
   .session-card:last-child { border-bottom: 0; }
   .section-heading { align-items: flex-start; flex-direction: column; }
   .section-heading > p { text-align: left; }
-  .market-chart { height: 740px; min-height: 700px; }
+  .market-chart { height: 620px; min-height: 580px; }
   .mobile-nav {
     position: fixed;
     right: 10px;
@@ -326,9 +326,11 @@ dialog p:not(.eyebrow) { color: #aab5c1; font-size: 11px; line-height: 1.75; }
   .header-countdown small, .sg-clock small { display: block; }
   .header-countdown, .sg-clock { min-width: 0; padding-left: 8px; }
   .sg-clock { text-align: right; }
-  .ticker-shell { height: 64px; }
-  .ticker-track, .ticker-widget, .ticker-widget > div { height: 63px; }
-  .ticker-widget iframe { width: 87% !important; height: 55px !important; transform: scale(1.15); transform-origin: left top; }
+  .ticker-shell { height: 56px; }
+  .ticker-track { width: 100%; height: 55px; display: block; animation: none !important; transform: none !important; }
+  .ticker-widget, .ticker-widget > div { width: 100%; min-width: 100%; height: 55px; }
+  .ticker-widget iframe { width: 100% !important; height: 55px !important; transform: none !important; }
+  #tickerWidgetClone { display: none; }
   .data-health { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 11px 3px; margin-top: 10px; padding: 12px 8px 10px; }
   .health-summary { grid-column: 1 / 9; min-width: 0; }
   .health-summary strong { font-size: 9px; }
@@ -350,7 +352,7 @@ dialog p:not(.eyebrow) { color: #aab5c1; font-size: 11px; line-height: 1.75; }
   .market-tabs { width: 100%; overflow-x: auto; }
   .market-tabs button { flex: 1; min-height: 44px; }
   button, .quiet-button, .driver-card { touch-action: manipulation; }
-  .market-chart { height: 700px; min-height: 680px; }
+  .market-chart { height: 540px; min-height: 520px; }
   .driver-stack { grid-template-columns: 1fr; }
   .driver-card { min-height: 165px; }
   .driver-market-read { width: max-content; max-width: 100%; margin: 8px 0 10px; padding: 6px 8px; background: rgba(255,255,255,.035); border: 1px solid var(--line); border-radius: 7px; font-size: 8px; }
@@ -368,5 +370,5 @@ dialog p:not(.eyebrow) { color: #aab5c1; font-size: 11px; line-height: 1.75; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation: none !important; transition: none !important; }
-  .ticker-track { animation: ticker-scroll 26s linear infinite !important; }
+  .ticker-track { animation: none !important; }
 }
