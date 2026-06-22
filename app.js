@@ -366,6 +366,12 @@ function renderMarket(payload) {
     $("#marketPulseTitle").textContent = "Cross-market read unavailable";
     $("#marketPulseSummary").textContent = "No verified market snapshot is available, so LiqueDT will not show a directional assumption.";
     setNeedle("#marketPulseNeedle", 0);
+    $$('[data-driver]').forEach(card => {
+      const metric = card.querySelector(".driver-market-read");
+      if (!metric) return;
+      metric.className = "driver-market-read offline";
+      metric.textContent = "Market context unavailable";
+    });
     renderTotalPulse();
     return false;
   }
@@ -570,12 +576,13 @@ async function refreshData() {
 }
 
 function bindNavigation() {
-  const links = $$(".desktop-nav a");
-  const sections = links.map(link => document.querySelector(link.getAttribute("href"))).filter(Boolean);
+  const links = $$(".primary-nav a");
+  const sections = [...new Set(links.map(link => document.querySelector(link.getAttribute("href"))).filter(Boolean))];
   let navLockUntil = 0;
   links.forEach(link => link.addEventListener("click", () => {
     navLockUntil = Date.now() + 1800;
-    links.forEach(item => item.classList.toggle("active", item === link));
+    const href = link.getAttribute("href");
+    links.forEach(item => item.classList.toggle("active", item.getAttribute("href") === href));
   }));
   const observer = new IntersectionObserver(entries => {
     if (Date.now() < navLockUntil) return;

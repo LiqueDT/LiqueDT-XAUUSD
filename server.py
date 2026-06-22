@@ -34,7 +34,7 @@ NEWS_FEEDS = (
     ("https://news.google.com/rss/search?q=%28gold%20OR%20XAUUSD%29%20%28Fed%20OR%20dollar%20OR%20Trump%20OR%20tariff%20OR%20geopolitical%29&hl=en-US&gl=US&ceid=US%3Aen", "Google News"),
 )
 CALENDAR_URL = "https://nfs.faireconomy.media/ff_calendar_thisweek.xml"
-USER_AGENT = "LiqueDT/1.0 (XAUUSD context companion)"
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36 LiqueDT/1.7"
 GOLD_TERMS = (
     "gold", "xau", "dollar", "usd", "fed", "fomc", "powell", "yield", "treasury",
     "inflation", "cpi", "pce", "jobs", "payroll", "geopolit", "war", "tariff", "oil",

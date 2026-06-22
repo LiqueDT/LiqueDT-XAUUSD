@@ -1,4 +1,4 @@
-const CACHE = "liquedt-shell-v9";
+const CACHE = "liquedt-shell-v10";
 const SHELL = ["./", "index.html", "styles.css", "app.js", "icon.svg", "favicon.ico", "favicon-32.png", "app-icon-192.png", "app-icon-512.png", "apple-touch-icon.png", "manifest.webmanifest"];
 
 self.addEventListener("install", event => {
