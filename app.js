@@ -24,6 +24,7 @@ let latestRefresh = null;
 let latestMarketPulse = null;
 let latestNewsPulse = null;
 let latestCalendar = null;
+let latestStaticBuild = null;
 const WIDGETS_DISABLED = new URLSearchParams(location.search).has("no-widgets");
 const healthState = { market: "checking", charts: "checking", news: "checking", calendar: "checking" };
 const healthMeta = { market: null, charts: null, news: null, calendar: null };
@@ -206,7 +207,9 @@ function renderHealthSummary() {
       .filter(([, value]) => value === "delayed")
       .map(([key]) => healthMeta[key]?.summary || `${healthLabels[key] || key}: snapshot`);
     title = delayed.some(text => text.toLowerCase().includes("stale")) ? "Using stale snapshot data" : "Live with snapshot data";
-    detail = delayed.length ? delayed.join(" · ") : "A cached or backup source is currently active";
+    const build = latestStaticBuild?.snapshot_generated_at || latestStaticBuild?.updated_at;
+    const buildDetail = build ? `GitHub checked ${sgtClock(build)} SGT (${ageLabel(build)})` : "";
+    detail = [buildDetail, delayed.length ? delayed.join(" · ") : "A cached or backup source is currently active"].filter(Boolean).join(" · ");
   }
   dot.className = `health-dot ${state}`;
   summary.textContent = title;
@@ -308,6 +311,28 @@ async function fetchJson(name) {
   throw lastError;
 }
 
+async function fetchStaticStatus() {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    const url = new URL("data/status.json", document.baseURI);
+    url.searchParams.set("v", String(Date.now()));
+    const response = await fetch(url, { headers: { Accept: "application/json" }, cache: "no-store", signal: controller.signal });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const contentType = response.headers.get("content-type") || "";
+    if (!contentType.includes("json")) throw new Error("Response was not JSON");
+    return response.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function renderStaticStatus(payload) {
+  if (!payload?.snapshot_generated_at && !payload?.updated_at) return;
+  latestStaticBuild = payload;
+  renderHealthSummary();
+}
+
 function relativeTime(value) {
   if (!value) return "Recently";
   const seconds = Math.round((new Date(value) - new Date()) / 1000);
@@ -350,11 +375,16 @@ function sgtStamp(value) {
   return `${day} ${sgtClock(date)} SGT`;
 }
 
+function olderThan(value, minutes) {
+  const date = timestamp(value);
+  return Boolean(date && minutes && Date.now() - date.getTime() > minutes * 60000);
+}
+
 function statusFreshness(payload, sourceName, options = {}) {
   const backup = Boolean(payload?.stale || payload?.static_snapshot);
-  const stale = Boolean(payload?.stale);
   const dataAt = firstTimestamp(payload?.snapshot_data_at, payload?.updated_at, payload?.snapshot_refreshed_at, payload?.snapshot_generated_at);
   const generatedAt = firstTimestamp(payload?.snapshot_generated_at, payload?.snapshot_attempted_at);
+  const stale = Boolean(payload?.stale || (backup && olderThan(dataAt || generatedAt, options.maxAgeMinutes)));
   const contentAt = firstTimestamp(options.contentAt);
   const stampTarget = dataAt || generatedAt;
   const stamp = stampTarget ? `${sgtClock(stampTarget)} SGT` : "time unknown";
@@ -464,7 +494,7 @@ function renderMarket(payload) {
   }
 
   const backup = Boolean(payload.stale || payload.static_snapshot);
-  const freshness = statusFreshness(payload, "Markets", { liveBadge: "LIVE DATA" });
+  const freshness = statusFreshness(payload, "Markets", { liveBadge: "LIVE DATA", maxAgeMinutes: 20 });
   latestMarketPulse = { ...payload.pulse, backup, freshness };
   setHealth("market", backup ? "delayed" : "live", freshness.health, freshness);
   const status = $("#marketPulseStatus");
@@ -558,7 +588,7 @@ function renderCalendar(payload) {
   }
   latestCalendar = payload;
   const backup = Boolean(payload.stale || payload.static_snapshot);
-  const freshness = statusFreshness(payload, "Calendar", { liveBadge: "LIVE FEED" });
+  const freshness = statusFreshness(payload, "Calendar", { liveBadge: "LIVE FEED", maxAgeMinutes: 90 });
   status.className = `source-status ${backup ? "delayed" : "live"}`;
   status.textContent = freshness.badge;
   status.title = freshness.detail;
@@ -619,7 +649,8 @@ function renderNews(payload) {
   const freshness = statusFreshness(payload, "News", {
     contentAt: payload.items?.[0]?.published,
     contentLabel: "latest headline",
-    liveBadge: "LIVE FEED"
+    liveBadge: "LIVE FEED",
+    maxAgeMinutes: 20
   });
   status.className = `source-status ${backup ? "delayed" : "live"}`;
   status.textContent = freshness.badge;
@@ -669,8 +700,8 @@ async function refreshData() {
   const button = $("#refreshData");
   button.classList.add("loading");
   button.disabled = true;
-  const [marketResult, calendarResult, newsResult] = await Promise.allSettled([
-    fetchJson("market"), fetchJson("calendar"), fetchJson("news")
+  const [marketResult, calendarResult, newsResult, staticStatusResult] = await Promise.allSettled([
+    fetchJson("market"), fetchJson("calendar"), fetchJson("news"), fetchStaticStatus()
   ]);
   let successCount = 0;
   if (marketResult.status === "fulfilled" && renderMarket(marketResult.value)) successCount += 1;
@@ -679,6 +710,7 @@ async function refreshData() {
   else renderCalendar({ ok: false });
   if (newsResult.status === "fulfilled" && renderNews(newsResult.value)) successCount += 1;
   else renderNews({ ok: false });
+  if (staticStatusResult.status === "fulfilled") renderStaticStatus(staticStatusResult.value);
   updateFreshness(successCount);
   button.classList.remove("loading");
   button.disabled = false;
