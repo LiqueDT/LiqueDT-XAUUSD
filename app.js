@@ -26,6 +26,8 @@ let latestNewsPulse = null;
 let latestCalendar = null;
 const WIDGETS_DISABLED = new URLSearchParams(location.search).has("no-widgets");
 const healthState = { market: "checking", charts: "checking", news: "checking", calendar: "checking" };
+const healthMeta = { market: null, charts: null, news: null, calendar: null };
+const healthLabels = { market: "Markets", charts: "Charts", news: "News", calendar: "Calendar" };
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -200,19 +202,24 @@ function renderHealthSummary() {
     detail = "Unavailable sources are clearly marked below";
   } else if (values.includes("delayed")) {
     state = "delayed";
-    title = "Live with backup data";
-    detail = "A cached or backup source is currently active";
+    const delayed = Object.entries(healthState)
+      .filter(([, value]) => value === "delayed")
+      .map(([key]) => healthMeta[key]?.summary || `${healthLabels[key] || key}: snapshot`);
+    title = delayed.some(text => text.toLowerCase().includes("stale")) ? "Using stale snapshot data" : "Live with snapshot data";
+    detail = delayed.length ? delayed.join(" · ") : "A cached or backup source is currently active";
   }
   dot.className = `health-dot ${state}`;
   summary.textContent = title;
   $("#dataFreshness").textContent = detail;
 }
 
-function setHealth(key, state, label) {
+function setHealth(key, state, label, meta) {
   healthState[key] = state;
+  if (arguments.length >= 4) healthMeta[key] = meta;
   const element = $(`#${key}Health`);
   element.className = state;
   element.textContent = label || ({ live: "Live", delayed: "Backup", offline: "Offline", checking: "Checking" }[state]);
+  element.title = healthMeta[key]?.detail || "";
   renderHealthSummary();
 }
 
@@ -312,6 +319,82 @@ function relativeTime(value) {
   return formatter.format(Math.round(seconds / 86400), "day");
 }
 
+function ageLabel(value) {
+  return timestamp(value) ? relativeTime(value) : "age unknown";
+}
+
+function timestamp(value) {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function firstTimestamp(...values) {
+  for (const value of values) {
+    const date = timestamp(value);
+    if (date) return date;
+  }
+  return null;
+}
+
+function sgtClock(value) {
+  const date = timestamp(value);
+  if (!date) return "time unknown";
+  return formatter(SINGAPORE_TZ, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(date);
+}
+
+function sgtStamp(value) {
+  const date = timestamp(value);
+  if (!date) return "time unknown";
+  const day = formatter(SINGAPORE_TZ, { weekday: "short", day: "2-digit", month: "short" }).format(date);
+  return `${day} ${sgtClock(date)} SGT`;
+}
+
+function statusFreshness(payload, sourceName, options = {}) {
+  const backup = Boolean(payload?.stale || payload?.static_snapshot);
+  const stale = Boolean(payload?.stale);
+  const dataAt = firstTimestamp(payload?.snapshot_data_at, payload?.updated_at, payload?.snapshot_refreshed_at, payload?.snapshot_generated_at);
+  const generatedAt = firstTimestamp(payload?.snapshot_generated_at, payload?.snapshot_attempted_at);
+  const contentAt = firstTimestamp(options.contentAt);
+  const stampTarget = dataAt || generatedAt;
+  const stamp = stampTarget ? `${sgtClock(stampTarget)} SGT` : "time unknown";
+  const badge = backup ? `${stale ? "STALE " : ""}SNAPSHOT · ${sgtClock(stampTarget)}` : (options.liveBadge || "LIVE DATA");
+  const health = backup ? `Snap ${sgtClock(stampTarget)}` : (options.liveHealth || "Live");
+  const contentNote = contentAt && options.contentLabel
+    ? ` · ${options.contentLabel} ${relativeTime(contentAt)}`
+    : "";
+
+  let detail;
+  if (backup && stale) {
+    const retry = generatedAt ? `; GitHub retry ${sgtStamp(generatedAt)}` : "";
+    detail = `Stale ${sourceName.toLowerCase()} snapshot from ${sgtStamp(stampTarget)} (${ageLabel(stampTarget)})${retry}${contentNote}`;
+  } else if (backup) {
+    const built = generatedAt ? `; built ${sgtStamp(generatedAt)}` : "";
+    detail = `${sourceName} snapshot from ${sgtStamp(stampTarget)} (${ageLabel(stampTarget)})${built}${contentNote}`;
+  } else {
+    detail = `${sourceName} live source updated ${sgtStamp(stampTarget)} (${ageLabel(stampTarget)})${contentNote}`;
+  }
+
+  const summaryBits = [`${sourceName}: ${stale ? "stale " : ""}${stamp}`];
+  if (contentAt && options.contentLabel) summaryBits.push(`${options.contentLabel} ${relativeTime(contentAt)}`);
+  const footer = backup
+    ? `${stale ? "Stale snapshot" : "Snapshot"} from ${sgtStamp(stampTarget)}${generatedAt && generatedAt.getTime() !== stampTarget?.getTime() ? ` · GitHub checked ${sgtStamp(generatedAt)}` : ""}${contentNote}`
+    : `Live source updated ${sgtStamp(stampTarget)}${contentNote}`;
+
+  return {
+    backup,
+    stale,
+    dataAt,
+    generatedAt,
+    contentAt,
+    badge,
+    health,
+    detail,
+    summary: summaryBits.join(" / "),
+    footer,
+  };
+}
+
 function eventDay(value) {
   if (!value) return "Date TBC";
   const date = new Date(value);
@@ -381,11 +464,13 @@ function renderMarket(payload) {
   }
 
   const backup = Boolean(payload.stale || payload.static_snapshot);
-  latestMarketPulse = { ...payload.pulse, backup };
-  setHealth("market", backup ? "delayed" : "live", backup ? "Snapshot" : "Live");
+  const freshness = statusFreshness(payload, "Markets", { liveBadge: "LIVE DATA" });
+  latestMarketPulse = { ...payload.pulse, backup, freshness };
+  setHealth("market", backup ? "delayed" : "live", freshness.health, freshness);
   const status = $("#marketPulseStatus");
   status.className = `source-status ${backup ? "delayed" : "live"}`;
-  status.textContent = backup ? "SNAPSHOT" : "LIVE DATA";
+  status.textContent = freshness.badge;
+  status.title = freshness.detail;
   setNeedle("#marketPulseNeedle", payload.pulse.score);
   $("#marketPulseTitle").textContent = payload.pulse.title || `Cross-market context ${sentiment(payload.pulse.score).phrase}`;
   $("#marketPulseSummary").textContent = payload.pulse.summary || "Weighted from gold momentum, the dollar, U.S. yields and oil.";
@@ -438,6 +523,7 @@ function renderTotalPulse() {
   const highImpact = latestCalendar?.events?.filter(event => event.impact === "High").length || 0;
   status.className = `source-status ${partial ? "delayed" : "live"}`;
   status.textContent = partial ? "PARTIAL / SNAPSHOT" : "LIVE COMBINED";
+  status.title = [latestMarketPulse?.freshness?.detail, latestNewsPulse?.freshness?.detail].filter(Boolean).join(" · ");
   setNeedle("#totalPulseNeedle", score);
   $("#totalPulseTitle").textContent = `Total XAUUSD context ${read.phrase}`;
   $("#totalPulseSummary").textContent = `${parts.join("; ")}. ${highImpact ? `${highImpact} high-impact USD event${highImpact === 1 ? " is" : "s are"} ahead, which can quickly invalidate the current read.` : "No listed high-impact USD event is currently adding event risk."}`;
@@ -452,7 +538,9 @@ function renderCalendar(payload) {
     if (!WIDGETS_DISABLED) {
       status.className = "source-status delayed";
       status.textContent = "LIVE BACKUP";
-      setHealth("calendar", "delayed", "Backup");
+      status.title = "Primary calendar feed is unavailable; TradingView calendar widget is loaded as a backup.";
+      setHealth("calendar", "delayed", "Backup", { summary: "Calendar: live backup widget", detail: status.title });
+      $("#calendarFreshnessNote").textContent = "Live backup widget · USD high/medium impact";
       mountWidget($("#calendarList"), "embed-widget-events.js", {
         colorTheme: "dark", isTransparent: true, width: "100%", height: 385,
         locale: "en", importanceFilter: "0,1", countryFilter: "us"
@@ -460,7 +548,9 @@ function renderCalendar(payload) {
     } else {
       status.className = "source-status offline";
       status.textContent = "UNAVAILABLE";
-      setHealth("calendar", "offline", "Unavailable");
+      status.title = "Calendar feed is unavailable.";
+      setHealth("calendar", "offline", "Unavailable", null);
+      $("#calendarFreshnessNote").textContent = "Calendar feed unavailable";
       $("#calendarList").innerHTML = '<div class="empty-feed">The calendar feed is unavailable right now. Use the full calendar link below before making time-sensitive decisions.</div>';
     }
     renderTotalPulse();
@@ -468,9 +558,12 @@ function renderCalendar(payload) {
   }
   latestCalendar = payload;
   const backup = Boolean(payload.stale || payload.static_snapshot);
+  const freshness = statusFreshness(payload, "Calendar", { liveBadge: "LIVE FEED" });
   status.className = `source-status ${backup ? "delayed" : "live"}`;
-  status.textContent = backup ? "SNAPSHOT" : "LIVE FEED";
-  setHealth("calendar", backup ? "delayed" : "live", backup ? "Snapshot" : "Live");
+  status.textContent = freshness.badge;
+  status.title = freshness.detail;
+  setHealth("calendar", backup ? "delayed" : "live", freshness.health, freshness);
+  $("#calendarFreshnessNote").textContent = `${freshness.footer} · USD high/medium impact`;
   const groups = new Map();
   payload.events.slice(0, 12).forEach(event => {
     const key = event.time_utc
@@ -504,7 +597,9 @@ function renderNews(payload) {
     if (!WIDGETS_DISABLED) {
       status.className = "source-status delayed";
       status.textContent = "LIVE BACKUP";
-      setHealth("news", "delayed", "Backup");
+      status.title = "Primary news feed is unavailable; TradingView headline widget is loaded as a backup.";
+      setHealth("news", "delayed", "Backup", { summary: "News: live backup widget", detail: status.title });
+      $("#newsFreshnessNote").textContent = "Live backup widget · source attribution shown per story";
       mountWidget($("#newsList"), "embed-widget-timeline.js", {
         feedMode: "symbol", symbol: "OANDA:XAUUSD", colorTheme: "dark",
         isTransparent: true, displayMode: "regular", width: "100%", height: 385, locale: "en"
@@ -512,25 +607,34 @@ function renderNews(payload) {
     } else {
       status.className = "source-status offline";
       status.textContent = "UNAVAILABLE";
-      setHealth("news", "offline", "Unavailable");
+      status.title = "News feed is unavailable.";
+      setHealth("news", "offline", "Unavailable", null);
+      $("#newsFreshnessNote").textContent = "News feed unavailable";
       $("#newsList").innerHTML = '<div class="empty-feed">Live headlines could not be reached. LiqueDT will retry automatically; open the source link below for a direct check.</div>';
     }
     renderPulse(null);
     return false;
   }
   const backup = Boolean(payload.stale || payload.static_snapshot);
+  const freshness = statusFreshness(payload, "News", {
+    contentAt: payload.items?.[0]?.published,
+    contentLabel: "latest headline",
+    liveBadge: "LIVE FEED"
+  });
   status.className = `source-status ${backup ? "delayed" : "live"}`;
-  status.textContent = backup ? "SNAPSHOT" : "LIVE FEED";
-  setHealth("news", backup ? "delayed" : "live", backup ? "Snapshot" : "Live");
+  status.textContent = freshness.badge;
+  status.title = freshness.detail;
+  setHealth("news", backup ? "delayed" : "live", freshness.health, freshness);
+  $("#newsFreshnessNote").textContent = `${freshness.footer} · source attribution shown per story`;
   $("#newsList").innerHTML = payload.items.slice(0, 18).map(item => `<a class="news-item" href="${escapeHtml(item.url)}" target="_blank" rel="noreferrer">
     <span class="news-effect ${escapeHtml(item.impact)}">${escapeHtml(item.impact || "mixed")}</span>
     <span class="news-copy"><h3>${escapeHtml(item.title)}</h3><p><span>${escapeHtml(item.source || "FXStreet")}</span><span>·</span><span>${escapeHtml(relativeTime(item.published))}</span></p></span>
   </a>`).join("");
-  renderPulse(payload.pulse, backup);
+  renderPulse(payload.pulse, backup, freshness);
   return true;
 }
 
-function renderPulse(pulse, backup = false) {
+function renderPulse(pulse, backup = false, freshness = null) {
   const status = $("#pulseStatus");
   if (!pulse) {
     latestNewsPulse = null;
@@ -543,9 +647,10 @@ function renderPulse(pulse, backup = false) {
     return;
   }
   const score = Math.max(-1, Math.min(1, Number(pulse.score) || 0));
-  latestNewsPulse = { ...pulse, score, backup };
+  latestNewsPulse = { ...pulse, score, backup, freshness };
   status.className = `source-status ${backup ? "delayed" : "live"}`;
-  status.textContent = `${backup ? "SNAPSHOT · " : ""}${pulse.sample_size || 0} HEADLINES`;
+  status.textContent = backup && freshness ? `${freshness.badge} · ${pulse.sample_size || 0}` : `${pulse.sample_size || 0} HEADLINES`;
+  status.title = freshness?.detail || "";
   $("#pulseNeedle").style.left = `${50 + score * 42}%`;
   $("#pulseTitle").textContent = pulse.title || "Balanced narrative";
   $("#pulseSummary").textContent = pulse.summary || "Recent headlines contain mixed gold-sensitive language.";

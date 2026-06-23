@@ -85,21 +85,43 @@ def snapshot(name: str, loader, previous: dict | None = None) -> dict:
     generated_at = datetime.now(timezone.utc).isoformat()
     try:
         payload = loader()
-        return {**payload, "stale": False, "snapshot_generated_at": generated_at}
+        data_at = payload.get("updated_at") or generated_at
+        return {
+            **payload,
+            "stale": False,
+            "snapshot_status": "fresh",
+            "snapshot_generated_at": generated_at,
+            "snapshot_refreshed_at": generated_at,
+            "snapshot_data_at": data_at,
+        }
     except Exception as exc:  # The site should still deploy and show an honest red status.
         if previous and previous.get("ok"):
+            previous_data_at = (
+                previous.get("snapshot_data_at")
+                or previous.get("updated_at")
+                or previous.get("snapshot_refreshed_at")
+                or previous.get("snapshot_generated_at")
+            )
+            previous_refreshed_at = previous.get("snapshot_refreshed_at") or previous.get("snapshot_generated_at")
             return {
                 **previous,
                 "stale": True,
                 "warning": f"Refresh failed ({type(exc).__name__}); showing last successful snapshot",
+                "snapshot_status": "stale_previous",
                 "snapshot_generated_at": generated_at,
+                "snapshot_attempted_at": generated_at,
+                "snapshot_refreshed_at": previous_refreshed_at,
+                "snapshot_data_at": previous_data_at,
+                "snapshot_error": type(exc).__name__,
             }
         return {
             "ok": False,
             "stale": False,
             "source": name,
             "error": type(exc).__name__,
+            "snapshot_status": "failed",
             "snapshot_generated_at": generated_at,
+            "snapshot_attempted_at": generated_at,
         }
 
 
