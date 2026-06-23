@@ -472,6 +472,7 @@ function correlationSummary(item) {
   if (item.id === "XAUUSD") return "Primary gold momentum anchor";
   const strength = item.correlation_strength || "unavailable";
   const label = item.correlation_label || "correlation unavailable";
+  return `Corr: ${strength} · 60D ${formatCorrelation(item.correlation_60)} · 20D ${formatCorrelation(item.correlation_20)} · ${label}`;
   return `${strength} ${label} · 60D ${formatCorrelation(item.correlation_60)} / 20D ${formatCorrelation(item.correlation_20)}`;
 }
 
@@ -543,6 +544,7 @@ function renderMarket(payload) {
     metric.innerHTML = `<strong>${escapeHtml(formatMarketValue(item))} · Gold effect: ${escapeHtml(goldEffect(item))}</strong><small>${escapeHtml(correlationSummary(item))}</small>${item.proxy_note ? `<small>${escapeHtml(item.proxy_note)}</small>` : ""}`;
     metric.textContent = `${formatMarketValue(item)} · Gold effect: ${goldEffect(item)}`;
     metric.innerHTML = `<strong>${escapeHtml(formatMarketValue(item))} · Gold effect: ${escapeHtml(goldEffect(item))}</strong><small>${escapeHtml(correlationSummary(item))}</small>${item.proxy_note ? `<small>${escapeHtml(item.proxy_note)}</small>` : ""}`;
+    metric.innerHTML = `<strong>${escapeHtml(formatMarketValue(item))} · Gold effect: ${escapeHtml(goldEffect(item))}</strong><br><small>${escapeHtml(correlationSummary(item))}</small>${item.proxy_note ? `<br><small>${escapeHtml(item.proxy_note)}</small>` : ""}`;
   });
   renderTotalPulse();
   return true;
