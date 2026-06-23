@@ -19,6 +19,14 @@ const widgetSymbols = {
   "BINANCE:XAUUSDT.P": { name: "XAU / TetherUS Perpetual", tag: "BINANCE · PERPETUAL" }
 };
 
+const tickerDefinitions = [
+  { id: "XAUUSD", label: "Gold", fallback: "XAUUSD" },
+  { id: "DXY", label: "Dollar index", fallback: "DXY" },
+  { id: "US10Y", label: "U.S. 10Y", fallback: "US10Y" },
+  { id: "WTI", label: "WTI crude", fallback: "WTI" },
+  { id: "XAUUSDT", label: "XAUUSDT perp", fallback: "XAUUSDT.P" }
+];
+
 let activeSymbol = "OANDA:XAUUSD";
 let latestRefresh = null;
 let latestMarketPulse = null;
@@ -243,23 +251,40 @@ function mountWidget(container, scriptName, config, healthKey = null) {
   container.append(shell, script);
 }
 
+function tickerNumber(value, fallback = "--") {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  const decimals = number >= 1000 ? 2 : number >= 100 ? 2 : number >= 10 ? 3 : 4;
+  return number.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+
+function tickerPercent(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "waiting";
+  return `${number >= 0 ? "+" : ""}${number.toFixed(2)}%`;
+}
+
+function renderTicker(items = []) {
+  const byId = new Map(items.map(item => [item.id, item]));
+  const cards = tickerDefinitions.map(definition => {
+    const item = byId.get(definition.id) || {};
+    const change = Number(item.change_percent);
+    const direction = Number.isFinite(change) ? (change > 0 ? "up" : change < 0 ? "down" : "flat") : "waiting";
+    const price = Number.isFinite(Number(item.price)) ? tickerNumber(item.price) : definition.fallback;
+    const label = item.name || definition.label;
+    return `<article class="ticker-card ${direction}">
+      <span class="ticker-dot" aria-hidden="true"></span>
+      <span class="ticker-name">${escapeHtml(label)}</span>
+      <span class="ticker-value"><strong class="ticker-price">${escapeHtml(price)}</strong><span class="ticker-change">${escapeHtml(tickerPercent(item.change_percent))}</span></span>
+    </article>`;
+  }).join("");
+  const strip = `<div class="ticker-strip">${cards}</div>`;
+  $("#tickerWidget").innerHTML = strip;
+  $("#tickerWidgetClone").innerHTML = strip;
+}
+
 function mountTicker() {
-  const mobile = window.matchMedia("(max-width: 560px)").matches;
-  const symbols = [
-    { proName: "OANDA:XAUUSD", title: "Gold" },
-    { proName: "CAPITALCOM:DXY", title: "Dollar index" },
-    { proName: "OANDA:USB10YUSD", title: "U.S. 10Y" },
-    { proName: "TVC:USOIL", title: "WTI crude" },
-    { proName: "BINANCE:XAUUSDT.P", title: "XAU / USDT perp" },
-    { proName: "OANDA:XAGUSD", title: "Silver" }
-  ];
-  const config = {
-    symbols: mobile ? symbols.slice(0, 4) : symbols,
-    showSymbolLogo: true, isTransparent: true, displayMode: "regular", colorTheme: "dark", locale: "en"
-  };
-  mountWidget($("#tickerWidget"), "embed-widget-ticker-tape.js", config);
-  if (mobile) $("#tickerWidgetClone").replaceChildren();
-  else mountWidget($("#tickerWidgetClone"), "embed-widget-ticker-tape.js", config);
+  renderTicker();
 }
 
 function mountChart(symbol = activeSymbol) {
@@ -500,6 +525,7 @@ function goldEffect(item) {
 
 function renderMarket(payload) {
   if (!payload.ok || !payload.items?.length || !payload.pulse) {
+    renderTicker();
     latestMarketPulse = null;
     setHealth("market", "offline", "No data");
     const status = $("#marketPulseStatus");
@@ -520,6 +546,7 @@ function renderMarket(payload) {
 
   const backup = Boolean(payload.stale || payload.static_snapshot);
   const freshness = statusFreshness(payload, "Markets", { liveBadge: "LIVE DATA", maxAgeMinutes: 20 });
+  renderTicker(payload.items);
   latestMarketPulse = { ...payload.pulse, backup, freshness };
   setHealth("market", backup ? "delayed" : "live", freshness.health, freshness);
   const status = $("#marketPulseStatus");
@@ -541,10 +568,7 @@ function renderMarket(payload) {
     }
     const read = sentiment(item.gold_score);
     metric.className = `driver-market-read ${read.key}`;
-    metric.innerHTML = `<strong>${escapeHtml(formatMarketValue(item))} · Gold effect: ${escapeHtml(goldEffect(item))}</strong><small>${escapeHtml(correlationSummary(item))}</small>${item.proxy_note ? `<small>${escapeHtml(item.proxy_note)}</small>` : ""}`;
-    metric.textContent = `${formatMarketValue(item)} · Gold effect: ${goldEffect(item)}`;
-    metric.innerHTML = `<strong>${escapeHtml(formatMarketValue(item))} · Gold effect: ${escapeHtml(goldEffect(item))}</strong><small>${escapeHtml(correlationSummary(item))}</small>${item.proxy_note ? `<small>${escapeHtml(item.proxy_note)}</small>` : ""}`;
-    metric.innerHTML = `<strong>${escapeHtml(formatMarketValue(item))} · Gold effect: ${escapeHtml(goldEffect(item))}</strong><br><small>${escapeHtml(correlationSummary(item))}</small>${item.proxy_note ? `<br><small>${escapeHtml(item.proxy_note)}</small>` : ""}`;
+    metric.innerHTML = `<strong>${escapeHtml(formatMarketValue(item))} ? Gold effect: ${escapeHtml(goldEffect(item))}</strong><br><small>${escapeHtml(correlationSummary(item))}</small>${item.proxy_note ? `<br><small>${escapeHtml(item.proxy_note)}</small>` : ""}`;
   });
   renderTotalPulse();
   return true;
@@ -786,8 +810,7 @@ function init() {
   updateClocks();
   setInterval(updateClocks, 1000);
   if (WIDGETS_DISABLED) {
-    $("#tickerWidget").innerHTML = '<div class="widget-placeholder compact">Live ticker paused for interface testing</div>';
-    $("#tickerWidgetClone").innerHTML = '<div class="widget-placeholder compact">Live ticker paused for interface testing</div>';
+    renderTicker();
     $("#marketChart").innerHTML = '<div class="widget-placeholder">Live chart paused for interface testing</div>';
     setHealth("charts", "delayed", "Paused");
   } else {
