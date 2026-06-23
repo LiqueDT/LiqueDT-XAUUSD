@@ -136,6 +136,29 @@ def read_previous(output: Path, name: str) -> dict | None:
         return None
 
 
+def feed_status(name: str, payload: dict) -> dict:
+    status = {
+        "ok": bool(payload.get("ok")),
+        "stale": bool(payload.get("stale")),
+        "source": payload.get("source") or name,
+        "snapshot_status": payload.get("snapshot_status") or ("stale" if payload.get("stale") else "fresh"),
+        "snapshot_generated_at": payload.get("snapshot_generated_at"),
+        "snapshot_refreshed_at": payload.get("snapshot_refreshed_at"),
+        "snapshot_data_at": payload.get("snapshot_data_at") or payload.get("updated_at"),
+        "warning": payload.get("warning"),
+        "error": payload.get("error") or payload.get("snapshot_error"),
+    }
+    if isinstance(payload.get("items"), list):
+        status["item_count"] = len(payload["items"])
+        if payload["items"]:
+            status["latest_item_at"] = payload["items"][0].get("published")
+    if isinstance(payload.get("events"), list):
+        status["event_count"] = len(payload["events"])
+        if payload["events"]:
+            status["next_event_at"] = payload["events"][0].get("time_utc")
+    return status
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", default=str(ROOT / "data"))
@@ -149,6 +172,15 @@ def main() -> None:
     }
     for name, payload in feeds.items():
         (output / f"{name}.json").write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    generated_at = datetime.now(timezone.utc).isoformat()
+    status = {
+        "ok": any(payload.get("ok") for payload in feeds.values()),
+        "source": "GitHub Actions static snapshot builder",
+        "updated_at": generated_at,
+        "snapshot_generated_at": generated_at,
+        "feeds": {name: feed_status(name, payload) for name, payload in feeds.items()},
+    }
+    (output / "status.json").write_text(json.dumps(status, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 
 
 if __name__ == "__main__":
