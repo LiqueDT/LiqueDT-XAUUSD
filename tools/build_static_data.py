@@ -28,22 +28,37 @@ def load_market_yfinance() -> dict:
     items: list[dict] = []
     weighted_score = 0.0
     total_weight = 0.0
+    histories: dict[str, list[float]] = {}
+    for series in server.MARKET_SERIES:
+        try:
+            instrument = yf.Ticker(str(series["ticker"]))
+            daily = instrument.history(period="6mo", interval="1d", auto_adjust=False, timeout=12)
+            histories[str(series["ticker"])] = [float(value) for value in daily["Close"].dropna().tolist()]
+        except Exception:
+            continue
+    gold_history = histories.get("GC=F", [])
+
     for series in server.MARKET_SERIES:
         try:
             instrument = yf.Ticker(str(series["ticker"]))
             intraday = instrument.history(period="5d", interval="5m", auto_adjust=False, timeout=12)
-            daily = instrument.history(period="5d", interval="1d", auto_adjust=False, timeout=12)
             intraday_close = intraday["Close"].dropna()
-            daily_close = daily["Close"].dropna()
+            daily_close = histories.get(str(series["ticker"]), [])
             if intraday_close.empty:
                 continue
             price = float(intraday_close.iloc[-1])
-            previous = float(daily_close.iloc[-2]) if len(daily_close) >= 2 else float(intraday_close.iloc[0])
+            previous = float(daily_close[-2]) if len(daily_close) >= 2 else float(intraday_close.iloc[0])
             if not previous:
                 continue
             change_percent = (price - previous) / previous * 100
-            normalized_move = max(-1.0, min(1.0, change_percent / 0.75))
-            gold_score = normalized_move * float(series["relation"])
+            normalized_move = max(-1.0, min(1.0, change_percent / float(series.get("move_scale", 0.75))))
+            if series["id"] == "XAUUSD":
+                corr_20, corr_60 = 1.0, 1.0
+            else:
+                corr_20 = server.rolling_corr(gold_history, daily_close, 20)
+                corr_60 = server.rolling_corr(gold_history, daily_close, 60)
+            relation_used = server.effective_relation(series, corr_60)
+            gold_score = normalized_move * relation_used
             weight = float(series["weight"])
             weighted_score += gold_score * weight
             total_weight += weight
@@ -55,6 +70,16 @@ def load_market_yfinance() -> dict:
                 "change_percent": round(change_percent, 3),
                 "gold_score": round(gold_score, 3),
                 "currency": "USD",
+                "assumed_relation": float(series["relation"]),
+                "effective_relation": round(relation_used, 3),
+                "correlation_20": corr_20,
+                "correlation_60": corr_60,
+                "correlation_strength": server.correlation_strength(corr_60),
+                "correlation_label": server.correlation_label(corr_60),
+                "correlation_note": server.correlation_note(series, corr_20, corr_60),
+                "relation_source": "rolling_60d_correlation" if corr_60 is not None and series["id"] != "XAUUSD" else "primary_or_macro_fallback",
+                "data_proxy": series["id"] == "XAUUSDT",
+                "proxy_note": "Backend uses XAUT-USD as the closest public proxy; chart tab remains BINANCE:XAUUSDT.P." if series["id"] == "XAUUSDT" else "",
             })
         except Exception:
             continue
@@ -68,10 +93,10 @@ def load_market_yfinance() -> dict:
         else "Cross-market context is balanced"
     )
     strongest = sorted(items, key=lambda item: abs(item["gold_score"]), reverse=True)[:3]
-    summary = "Weighted market movement: " + ", ".join(
-        f'{item["id"]} {"supports" if item["gold_score"] > .1 else "pressures" if item["gold_score"] < -.1 else "is neutral for"} gold'
+    summary = "Correlation-aware XAUUSD movement: " + ", ".join(
+        f'{item["id"]} {"supports" if item["gold_score"] > .1 else "pressures" if item["gold_score"] < -.1 else "is neutral for"} gold ({item.get("correlation_label", "correlation n/a")})'
         for item in strongest
-    ) + ". Oil remains deliberately low-weight because its relationship with gold is indirect."
+    ) + ". The gauge is driven by each market move multiplied by its rolling XAUUSD correlation; weak regimes are muted."
     return {
         "ok": True,
         "source": "Yahoo Finance via resilient market client",
