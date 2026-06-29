@@ -34,6 +34,7 @@ let latestMarketItems = [];
 let tickerResizeTimer = null;
 let latestNewsPulse = null;
 let latestCalendar = null;
+let latestCalendarPulse = null;
 let latestStaticBuild = null;
 const WIDGETS_DISABLED = new URLSearchParams(location.search).has("no-widgets");
 const healthState = { market: "checking", charts: "checking", news: "checking", calendar: "checking" };
@@ -585,14 +586,19 @@ function renderTotalPulse() {
   let weighted = 0;
   let weight = 0;
   if (latestMarketPulse) {
-    weighted += Number(latestMarketPulse.score || 0) * .65;
-    weight += .65;
+    weighted += Number(latestMarketPulse.score || 0) * .60;
+    weight += .60;
     parts.push(`Cross-market context ${sentiment(latestMarketPulse.score).phrase}`);
   }
   if (latestNewsPulse) {
-    weighted += Number(latestNewsPulse.score || 0) * .35;
-    weight += .35;
+    weighted += Number(latestNewsPulse.score || 0) * .30;
+    weight += .30;
     parts.push(`news narrative ${sentiment(latestNewsPulse.score).phrase}`);
+  }
+  if (latestCalendarPulse?.sample_size) {
+    weighted += Number(latestCalendarPulse.score || 0) * .10;
+    weight += .10;
+    parts.push(`latest USD result ${sentiment(latestCalendarPulse.score).phrase}`);
   }
 
   const status = $("#totalPulseStatus");
@@ -600,7 +606,7 @@ function renderTotalPulse() {
     status.className = "source-status offline";
     status.textContent = "NO DATA";
     $("#totalPulseTitle").textContent = "Total context unavailable";
-    $("#totalPulseSummary").textContent = "LiqueDT needs at least one verified market or news source before showing an assumption.";
+    $("#totalPulseSummary").textContent = "LiqueDT needs at least one verified market, calendar or news source before showing an assumption.";
     setNeedle("#totalPulseNeedle", 0);
     return;
   }
@@ -608,14 +614,20 @@ function renderTotalPulse() {
   const score = weighted / weight;
   const read = sentiment(score);
   const partial = !latestMarketPulse || !latestNewsPulse || latestMarketPulse?.backup || latestNewsPulse?.backup;
-  const highImpact = latestCalendar?.events?.filter(event => event.impact === "High").length || 0;
+  const highImpact = latestCalendar?.events?.filter(event => event.impact === "High" || event.gold_relevance === "Critical").length || 0;
+  const latestResult = latestCalendarPulse?.latest_result;
   status.className = `source-status ${partial ? "delayed" : "live"}`;
   status.textContent = partial ? "PARTIAL / SNAPSHOT" : "LIVE COMBINED";
-  status.title = [latestMarketPulse?.freshness?.detail, latestNewsPulse?.freshness?.detail].filter(Boolean).join(" · ");
+  status.title = [latestMarketPulse?.freshness?.detail, latestNewsPulse?.freshness?.detail].filter(Boolean).join(" - ");
   setNeedle("#totalPulseNeedle", score);
   $("#totalPulseTitle").textContent = `Total XAUUSD context ${read.phrase}`;
-  $("#totalPulseSummary").textContent = `${parts.join("; ")}. ${highImpact ? `${highImpact} high-impact USD event${highImpact === 1 ? " is" : "s are"} ahead, which can quickly invalidate the current read.` : "No listed high-impact USD event is currently adding event risk."}`;
-  const factors = [latestMarketPulse && `Markets: ${sentiment(latestMarketPulse.score).label}`, latestNewsPulse && `News: ${sentiment(latestNewsPulse.score).label}`, highImpact && `${highImpact} high-impact event${highImpact === 1 ? "" : "s"}`].filter(Boolean);
+  const eventLine = latestResult
+    ? `Latest result: ${latestResult.title} actual ${latestResult.actual || "released"}${latestResult.forecast ? ` vs forecast ${latestResult.forecast}` : ""} -> ${latestResult.result_bias} for gold (${latestResult.result_reason}).`
+    : highImpact
+      ? `${highImpact} important USD event${highImpact === 1 ? " is" : "s are"} on watch; a fresh result can quickly invalidate the current read.`
+      : "No listed high-impact USD event is currently adding event-result pressure.";
+  $("#totalPulseSummary").textContent = `${parts.join("; ")}. ${eventLine}`;
+  const factors = [latestMarketPulse && `Markets: ${sentiment(latestMarketPulse.score).label}`, latestNewsPulse && `News: ${sentiment(latestNewsPulse.score).label}`, latestCalendarPulse?.sample_size && `Calendar: ${sentiment(latestCalendarPulse.score).label}`, highImpact && `${highImpact} event risk`].filter(Boolean);
   $("#totalPulseFactors").innerHTML = factors.map(factor => `<span>${escapeHtml(factor)}</span>`).join("");
 }
 
@@ -623,6 +635,7 @@ function renderCalendar(payload) {
   const status = $("#calendarStatus");
   if (!payload.ok || !payload.events?.length) {
     latestCalendar = null;
+    latestCalendarPulse = null;
     if (!WIDGETS_DISABLED) {
       status.className = "source-status delayed";
       status.textContent = "LIVE BACKUP";
@@ -645,13 +658,14 @@ function renderCalendar(payload) {
     return false;
   }
   latestCalendar = payload;
+  latestCalendarPulse = payload.pulse || null;
   const backup = Boolean(payload.stale || payload.static_snapshot);
   const freshness = statusFreshness(payload, "Calendar", { liveBadge: "LIVE FEED", maxAgeMinutes: 90 });
   status.className = `source-status ${backup ? "delayed" : "live"}`;
   status.textContent = freshness.badge;
   status.title = freshness.detail;
   setHealth("calendar", backup ? "delayed" : "live", freshness.health, freshness);
-  $("#calendarFreshnessNote").textContent = `${freshness.footer} · USD high/medium impact`;
+  $("#calendarFreshnessNote").textContent = `${freshness.footer} - Forex Factory SGT - USD high/medium impact`;
   const groups = new Map();
   payload.events.slice(0, 12).forEach(event => {
     const key = event.time_utc
@@ -666,10 +680,14 @@ function renderCalendar(payload) {
       const time = event.time_utc
         ? formatter(SINGAPORE_TZ, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(event.time_utc))
         : "TBC";
-      const values = [event.forecast && `Fcst ${event.forecast}`, event.previous && `Prev ${event.previous}`].filter(Boolean).join(" · ") || "Details pending";
+      const values = [event.actual && `Actual ${event.actual}`, event.forecast && `Fcst ${event.forecast}`, event.previous && `Prev ${event.previous}`].filter(Boolean).join(" - ") || "Details pending";
+      const bias = event.result_bias || "pending";
+      const resultLine = event.result_status === "released"
+        ? `<p class="calendar-result ${escapeHtml(bias)}">Gold result read: ${escapeHtml(bias)} - ${escapeHtml(event.result_reason || "actual result released")}</p>`
+        : `<p class="calendar-reason">Gold watch: ${escapeHtml(event.gold_relevance || "Watch")} - ${escapeHtml(event.gold_reason || "USD event risk")}</p>`;
       return `<article class="calendar-item">
         <div class="calendar-time"><strong>${escapeHtml(time)}</strong><small>SGT</small></div>
-        <div class="calendar-copy"><h3>${escapeHtml(event.title)}</h3><p>USD · ${escapeHtml(values)}</p></div>
+        <div class="calendar-copy"><h3>${escapeHtml(event.title)}</h3><p>USD - ${escapeHtml(values)}</p>${resultLine}</div>
         <span class="impact ${event.impact === "High" ? "high" : "medium"}"><i></i>${escapeHtml(event.impact)}</span>
       </article>`;
     }).join("");

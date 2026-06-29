@@ -234,6 +234,10 @@ main, footer { width: min(calc(100% - 48px), var(--max)); margin-inline: auto; }
 .calendar-time small { margin-top: 5px; color: var(--muted); font: 400 7px/1 var(--mono); text-transform: uppercase; }
 .calendar-copy h3 { margin: 0; font-size: 11px; font-weight: 500; line-height: 1.4; }
 .calendar-copy p { margin: 5px 0 0; color: var(--muted); font: 400 8px/1.4 var(--mono); }
+.calendar-result, .calendar-reason { margin-top: 6px; font: 500 7px/1.45 var(--mono); letter-spacing: .02em; text-transform: uppercase; }
+.calendar-result.bullish { color: var(--acid); }
+.calendar-result.bearish { color: var(--red); }
+.calendar-result.mixed, .calendar-result.pending, .calendar-reason { color: #91a0b0; }
 .impact { display: flex; align-items: center; gap: 5px; color: var(--muted); font: 400 7px/1 var(--mono); text-transform: uppercase; }
 .impact i { width: 6px; height: 6px; border-radius: 50%; background: var(--gold); }
 .impact.high i { background: var(--red); box-shadow: 0 0 8px rgba(240,121,113,.4); }
