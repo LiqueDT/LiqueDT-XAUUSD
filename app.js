@@ -665,7 +665,7 @@ function renderCalendar(payload) {
   status.textContent = freshness.badge;
   status.title = freshness.detail;
   setHealth("calendar", backup ? "delayed" : "live", freshness.health, freshness);
-  $("#calendarFreshnessNote").textContent = `${freshness.footer} - Forex Factory SGT - USD high/medium impact`;
+  $("#calendarFreshnessNote").textContent = `${freshness.footer} - Forex Factory UTC feed -> SGT display - USD high/medium impact`;
   const groups = new Map();
   payload.events.slice(0, 12).forEach(event => {
     const key = event.time_utc

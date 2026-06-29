@@ -36,7 +36,6 @@ NEWS_FEEDS = (
 )
 CALENDAR_URLS = (
     "https://nfs.faireconomy.media/ff_calendar_thisweek.xml",
-    "https://nfs.faireconomy.media/ff_calendar_nextweek.xml",
 )
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36 LiqueDT/1.7"
 GOLD_TERMS = (
@@ -559,10 +558,9 @@ def parse_calendar_datetime(date_text: str, time_text: str) -> str | None:
             continue
     if parsed_time is None:
         return None
-    # User's Forex Factory calendar is already set to Singapore time; store UTC for app rendering.
-    singapore = timezone(timedelta(hours=8))
-    sgt_time = parsed_date.replace(hour=parsed_time.hour, minute=parsed_time.minute, tzinfo=singapore)
-    return sgt_time.astimezone(timezone.utc).isoformat()
+    # Forex Factory's public XML feed timestamps are UTC; the UI converts UTC to SGT.
+    utc_time = parsed_date.replace(hour=parsed_time.hour, minute=parsed_time.minute, tzinfo=timezone.utc)
+    return utc_time.isoformat()
 
 
 def parse_event_number(value: str | None) -> float | None:
@@ -695,7 +693,7 @@ def load_calendar() -> dict[str, Any]:
     selected = events[:14]
     return {
         "ok": True,
-        "source": "Forex Factory calendar feed this week + next week (SGT input, UTC normalized)",
+        "source": "Forex Factory calendar feed (UTC feed time, displayed in SGT)",
         "updated_at": now.isoformat(),
         "events": selected,
         "pulse": calendar_pulse(selected),

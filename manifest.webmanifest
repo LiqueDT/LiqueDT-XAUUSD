@@ -1,6 +1,6 @@
 {
-  "name": "LiqueDT — XAUUSD Market Context",
-  "short_name": "LiqueDT",
+  "name": "LiqueDT-XAUUSD",
+  "short_name": "LiqueDT-XAUUSD",
   "description": "Live XAUUSD sessions, cross-market context, economic events and news in Singapore time.",
   "start_url": "./",
   "scope": "./",
