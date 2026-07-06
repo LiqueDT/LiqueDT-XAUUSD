@@ -273,6 +273,7 @@ dialog { width: min(520px, calc(100% - 30px)); padding: 0; color: var(--paper); 
 dialog::backdrop { background: rgba(7,11,15,.8); backdrop-filter: blur(5px); }
 dialog form { position: relative; padding: 32px; }
 .dialog-close { position: absolute; right: 17px; top: 14px; color: var(--muted); background: none; border: 0; font-size: 24px; cursor: pointer; }
+.feedback-submit-frame { display: none; }
 dialog h2 { margin: 0 0 18px; font-size: 28px; font-weight: 500; line-height: 1.1; letter-spacing: -.05em; }
 dialog p:not(.eyebrow) { color: #aab5c1; font-size: 11px; line-height: 1.75; }
 .form-field { display: grid; gap: 7px; margin-top: 16px; color: var(--muted); font: 500 8px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; }
@@ -405,8 +406,8 @@ dialog p:not(.eyebrow) { color: #aab5c1; font-size: 11px; line-height: 1.75; }
   .pulse-topline { flex-wrap: wrap; gap: 10px; }
   .source-status { max-width: 100%; overflow: visible; text-overflow: clip; white-space: normal; line-height: 1.25; border-radius: 12px; }
   .pulse-topline .source-status { margin-left: auto; text-align: right; }
-  .panel-heading { grid-template-columns: minmax(0, 1fr); gap: 12px; }
-  .panel-heading .source-status { justify-self: start; text-align: left; }
+  .panel-heading { grid-template-columns: minmax(0, 1fr) auto; gap: 12px; }
+  .panel-heading .source-status { justify-self: end; max-width: 145px; text-align: right; }
   .panel-footer { flex-direction: column; }
   .calendar-list, .news-list { min-height: 300px; }
   .news-list { grid-template-columns: 1fr; }

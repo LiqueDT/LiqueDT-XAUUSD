@@ -13,10 +13,10 @@ const sessions = [
 
 const widgetSymbols = {
   "OANDA:XAUUSD": { name: "Gold / U.S. Dollar", tag: "PRECIOUS METALS" },
-  "CAPITALCOM:DXY": { name: "U.S. Dollar Index", tag: "CURRENCY Â· CAPITAL.COM" },
-  "OANDA:USB10YUSD": { name: "U.S. 10Y Bond Yield", tag: "RATES Â· OANDA" },
+  "CAPITALCOM:DXY": { name: "U.S. Dollar Index", tag: "CURRENCY · CAPITAL.COM" },
+  "OANDA:USB10YUSD": { name: "U.S. 10Y Bond Yield", tag: "RATES · OANDA" },
   "TVC:USOIL": { name: "WTI Crude Oil", tag: "ENERGY" },
-  "BINANCE:XAUUSDT.P": { name: "XAU / TetherUS Perpetual", tag: "BINANCE Â· PERPETUAL" }
+  "BINANCE:XAUUSDT.P": { name: "XAU / TetherUS Perpetual", tag: "BINANCE · PERPETUAL" }
 };
 
 const tickerDefinitions = [
@@ -177,7 +177,7 @@ function updateClocks() {
   $("#sgTime").textContent = formatter(SINGAPORE_TZ, {
     hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23"
   }).format(now);
-  $("#sgDate").textContent = `${formatter(SINGAPORE_TZ, { weekday: "short", day: "2-digit", month: "short" }).format(now)} Â· SGT`;
+  $("#sgDate").textContent = `${formatter(SINGAPORE_TZ, { weekday: "short", day: "2-digit", month: "short" }).format(now)} · SGT`;
 
   const market = goldMarketState(now);
   $("#marketState").textContent = market.open ? "XAUUSD open" : "XAUUSD closed";
@@ -220,7 +220,7 @@ function renderHealthSummary() {
     title = delayed.some(text => text.toLowerCase().includes("stale")) ? "Using stale snapshot data" : "Live with snapshot data";
     const build = latestStaticBuild?.snapshot_generated_at || latestStaticBuild?.updated_at;
     const buildDetail = build ? `App checked ${sgtClock(build)} SGT (${ageLabel(build)})` : "";
-    detail = [buildDetail, delayed.length ? delayed.join(" Â· ") : "A cached or backup source is currently active"].filter(Boolean).join(" Â· ");
+    detail = [buildDetail, delayed.length ? delayed.join(" · ") : "A cached or backup source is currently active"].filter(Boolean).join(" · ");
   }
   dot.className = `health-dot ${state}`;
   summary.textContent = title;
@@ -419,10 +419,10 @@ function statusFreshness(payload, sourceName, options = {}) {
   const contentAt = firstTimestamp(options.contentAt);
   const stampTarget = dataAt || generatedAt;
   const stamp = stampTarget ? `${sgtClock(stampTarget)} SGT` : "time unknown";
-  const badge = backup ? `${stale ? "STALE " : ""}SNAPSHOT ${sgtClock(stampTarget)}` : (options.liveBadge || "LIVE DATA");
+  const badge = backup ? `${stale ? "STALE " : ""}SNAPSHOT · ${sgtClock(stampTarget)}` : (options.liveBadge || "LIVE DATA");
   const health = backup ? `Snap ${sgtClock(stampTarget)}` : (options.liveHealth || "Live");
   const contentNote = contentAt && options.contentLabel
-    ? ` Â· ${options.contentLabel} ${relativeTime(contentAt)}`
+    ? ` · ${options.contentLabel} ${relativeTime(contentAt)}`
     : "";
 
   let detail;
@@ -439,7 +439,7 @@ function statusFreshness(payload, sourceName, options = {}) {
   const summaryBits = [`${sourceName}: ${stale ? "stale " : ""}${stamp}`];
   if (contentAt && options.contentLabel) summaryBits.push(`${options.contentLabel} ${relativeTime(contentAt)}`);
   const footer = backup
-    ? `${stale ? "Stale snapshot" : "Snapshot"} from ${sgtStamp(stampTarget)}${generatedAt && generatedAt.getTime() !== stampTarget?.getTime() ? ` Â· App checked ${sgtStamp(generatedAt)}` : ""}${contentNote}`
+    ? `${stale ? "Stale snapshot" : "Snapshot"} from ${sgtStamp(stampTarget)}${generatedAt && generatedAt.getTime() !== stampTarget?.getTime() ? ` · App checked ${sgtStamp(generatedAt)}` : ""}${contentNote}`
     : `Live source updated ${sgtStamp(stampTarget)}${contentNote}`;
 
   return {
@@ -472,7 +472,7 @@ function eventDayLong(value) {
   const date = new Date(value);
   const relative = eventDay(value);
   const full = formatter(SINGAPORE_TZ, { weekday: "long", day: "2-digit", month: "short" }).format(date);
-  return relative === "Today" || relative === "Tomorrow" ? `${relative} Â· ${full}` : full;
+  return relative === "Today" || relative === "Tomorrow" ? `${relative} · ${full}` : full;
 }
 
 function sentiment(score) {
@@ -491,7 +491,7 @@ function formatMarketValue(item) {
   const change = Number(item.change_percent);
   if (!Number.isFinite(price) || !Number.isFinite(change)) return "Live value unavailable";
   const decimals = price >= 100 ? 2 : price >= 10 ? 3 : 4;
-  return `${price.toLocaleString("en-US", { maximumFractionDigits: decimals })} Â· ${change >= 0 ? "+" : ""}${change.toFixed(2)}%`;
+  return `${price.toLocaleString("en-US", { maximumFractionDigits: decimals })} · ${change >= 0 ? "+" : ""}${change.toFixed(2)}%`;
 }
 
 function formatCorrelation(value) {
@@ -503,8 +503,8 @@ function correlationSummary(item) {
   if (item.id === "XAUUSD") return "Primary gold momentum anchor";
   const strength = item.correlation_strength || "unavailable";
   const label = item.correlation_label || "correlation unavailable";
-  return `Corr: ${strength} Â· 60D ${formatCorrelation(item.correlation_60)} Â· 20D ${formatCorrelation(item.correlation_20)} Â· ${label}`;
-  return `${strength} ${label} Â· 60D ${formatCorrelation(item.correlation_60)} / 20D ${formatCorrelation(item.correlation_20)}`;
+  return `Corr: ${strength} · 60D ${formatCorrelation(item.correlation_60)} · 20D ${formatCorrelation(item.correlation_20)} · ${label}`;
+  return `${strength} ${label} · 60D ${formatCorrelation(item.correlation_60)} / 20D ${formatCorrelation(item.correlation_20)}`;
 }
 
 function newsImpactLabel(item) {
@@ -515,7 +515,7 @@ function newsEstimateLine(item) {
   const confidence = item.confidence_label || "low";
   const reason = item.impact_reason || "headline language";
   const method = item.verified_article ? "article verified" : "headline estimate";
-  return `Estimated impact Â· ${confidence} confidence Â· ${reason} Â· ${method}`;
+  return `Estimated impact · ${confidence} confidence · ${reason} · ${method}`;
 }
 
 function goldEffect(item) {
@@ -641,7 +641,7 @@ function renderCalendar(payload) {
       status.textContent = "LIVE BACKUP";
       status.title = "Primary calendar feed is unavailable; TradingView calendar widget is loaded as a backup.";
       setHealth("calendar", "delayed", "Backup", { summary: "Calendar: live backup widget", detail: status.title });
-      $("#calendarFreshnessNote").textContent = "Live backup widget Â· USD high/medium impact";
+      $("#calendarFreshnessNote").textContent = "Live backup widget · USD high/medium impact";
       mountWidget($("#calendarList"), "embed-widget-events.js", {
         colorTheme: "dark", isTransparent: true, width: "100%", height: 385,
         locale: "en", importanceFilter: "0,1", countryFilter: "us"
@@ -705,7 +705,7 @@ function renderNews(payload) {
       status.textContent = "LIVE BACKUP";
       status.title = "Primary news feed is unavailable; TradingView headline widget is loaded as a backup.";
       setHealth("news", "delayed", "Backup", { summary: "News: live backup widget", detail: status.title });
-      $("#newsFreshnessNote").textContent = "Live backup widget Â· source attribution shown per story";
+      $("#newsFreshnessNote").textContent = "Live backup widget · source attribution shown per story";
       mountWidget($("#newsList"), "embed-widget-timeline.js", {
         feedMode: "symbol", symbol: "OANDA:XAUUSD", colorTheme: "dark",
         isTransparent: true, displayMode: "regular", width: "100%", height: 385, locale: "en"
@@ -732,15 +732,15 @@ function renderNews(payload) {
   status.textContent = freshness.badge;
   status.title = freshness.detail;
   setHealth("news", backup ? "delayed" : "live", freshness.health, freshness);
-  $("#newsFreshnessNote").textContent = `${freshness.footer} Â· source attribution shown per story`;
+  $("#newsFreshnessNote").textContent = `${freshness.footer} · source attribution shown per story`;
   $("#newsList").innerHTML = payload.items.slice(0, 18).map(item => `<a class="news-item" href="${escapeHtml(item.url)}" target="_blank" rel="noreferrer">
     <span class="news-effect ${escapeHtml(item.impact)}">${escapeHtml(item.impact || "mixed")}</span>
-    <span class="news-copy"><h3>${escapeHtml(item.title)}</h3><p><span>${escapeHtml(item.source || "FXStreet")}</span><span>Â·</span><span>${escapeHtml(relativeTime(item.published))}</span></p></span>
+    <span class="news-copy"><h3>${escapeHtml(item.title)}</h3><p><span>${escapeHtml(item.source || "FXStreet")}</span><span>·</span><span>${escapeHtml(relativeTime(item.published))}</span></p></span>
   </a>`).join("");
-  $("#newsFreshnessNote").textContent = `${freshness.footer} Â· impact is estimated from headline text, not full-article verification`;
+  $("#newsFreshnessNote").textContent = `${freshness.footer} · impact is estimated from headline text, not full-article verification`;
   $("#newsList").innerHTML = payload.items.slice(0, 18).map(item => `<a class="news-item" href="${escapeHtml(item.url)}" target="_blank" rel="noreferrer">
     <span class="news-effect ${escapeHtml(item.impact)}"><small>EST.</small>${escapeHtml(item.impact || "mixed")}</span>
-    <span class="news-copy"><h3>${escapeHtml(item.title)}</h3><p><span>${escapeHtml(item.source || "FXStreet")}</span><span>Â·</span><span>${escapeHtml(relativeTime(item.published))}</span></p><p class="news-estimate">${escapeHtml(newsEstimateLine(item))}</p></span>
+    <span class="news-copy"><h3>${escapeHtml(item.title)}</h3><p><span>${escapeHtml(item.source || "FXStreet")}</span><span>·</span><span>${escapeHtml(relativeTime(item.published))}</span></p><p class="news-estimate">${escapeHtml(newsEstimateLine(item))}</p></span>
   </a>`).join("");
   renderPulse(payload.pulse, backup, freshness);
   return true;
@@ -819,7 +819,26 @@ function bindEvents() {
   $("#refreshData").addEventListener("click", refreshData);
   $("#methodButton").addEventListener("click", () => $("#methodDialog").showModal());
   $("#feedbackButton").addEventListener("click", () => $("#feedbackDialog").showModal());
-  $$('[data-close-dialog]').forEach(button => button.addEventListener("click", () => $(`#${button.dataset.closeDialog}`).close()));
+  $$('[data-close-dialog]').forEach(button => button.addEventListener("click", () => $(`#${button.dataset.closeDialog}`)?.close()));
+  $$("dialog").forEach(dialog => dialog.addEventListener("click", event => {
+    if (event.target === dialog) dialog.close();
+  }));
+  $("#feedbackForm")?.addEventListener("submit", event => {
+    const button = event.currentTarget.querySelector(".primary-button");
+    if (!button) return;
+    button.disabled = true;
+    button.textContent = "Sending...";
+    window.setTimeout(() => {
+      button.disabled = false;
+      button.textContent = "Sent / close";
+    }, 1400);
+  });
+  $("#feedbackDialog")?.addEventListener("close", () => {
+    const button = $("#feedbackForm")?.querySelector(".primary-button");
+    if (!button) return;
+    button.disabled = false;
+    button.textContent = "Send feedback";
+  });
   $$("#marketTabs button").forEach(button => button.addEventListener("click", () => mountChart(button.dataset.symbol)));
   $$('[data-open-symbol]').forEach(button => button.addEventListener("click", () => {
     mountChart(button.dataset.openSymbol);
