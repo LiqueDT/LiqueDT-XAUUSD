@@ -216,7 +216,7 @@ main, footer { width: min(calc(100% - 48px), var(--max)); margin-inline: auto; }
 .driver-card button:hover { color: var(--acid); }
 
 .intel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; border-top: 1px solid var(--line); }
-.calendar-section { grid-template-columns: 1fr; }
+.calendar-section { grid-template-columns: minmax(0, 1.25fr) minmax(340px, .75fr); }
 .news-section { border-top: 1px solid var(--line); }
 .intel-panel { padding: 26px; }
 .panel-heading { min-height: 74px; display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: start; margin-bottom: 16px; }
@@ -241,6 +241,17 @@ main, footer { width: min(calc(100% - 48px), var(--max)); margin-inline: auto; }
 .impact { display: flex; align-items: center; gap: 5px; color: var(--muted); font: 400 7px/1 var(--mono); text-transform: uppercase; }
 .impact i { width: 6px; height: 6px; border-radius: 50%; background: var(--gold); }
 .impact.high i { background: var(--red); box-shadow: 0 0 8px rgba(240,121,113,.4); }
+.holiday-list { min-height: 385px; }
+.holiday-item { display: grid; grid-template-columns: 62px minmax(0, 1fr) auto; align-items: center; gap: 16px; padding: 17px 0; border-top: 1px solid var(--line); }
+.holiday-date strong, .holiday-date small { display: block; }
+.holiday-date strong { font: 500 12px/1 var(--mono); }
+.holiday-date small { margin-top: 5px; color: var(--muted); font: 400 7px/1 var(--mono); text-transform: uppercase; }
+.holiday-copy h3 { margin: 0; font-size: 11px; font-weight: 500; line-height: 1.4; }
+.holiday-copy p { margin: 5px 0 0; color: var(--muted); font: 400 8px/1.45 var(--mono); }
+.holiday-badge { justify-self: end; padding: 6px 8px; border-radius: 999px; color: #cbd5df; background: rgba(255,255,255,.055); font: 600 7px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; }
+.holiday-badge.closed, .holiday-badge.today { color: #ffaaa4; background: rgba(240,121,113,.13); }
+.holiday-badge.adjusted { color: #8fb5ff; background: var(--acid-dim); }
+.holiday-item.today { background: linear-gradient(90deg, rgba(240,121,113,.055), transparent 45%); }
 .news-item { display: grid; grid-template-columns: auto 1fr; gap: 13px; padding: 16px 0; border-top: 1px solid var(--line); text-decoration: none; }
 .news-item:hover h3 { color: var(--acid); }
 .news-effect { width: 62px; padding-top: 2px; color: var(--muted); font: 500 7px/1.25 var(--mono); text-transform: uppercase; }
@@ -256,6 +267,8 @@ main, footer { width: min(calc(100% - 48px), var(--max)); margin-inline: auto; }
 .panel-footer { display: flex; justify-content: space-between; gap: 14px; margin-top: 12px; padding-top: 15px; color: #738091; border-top: 1px solid var(--line); font: 400 7px/1 var(--mono); text-transform: uppercase; }
 .panel-footer span:first-child { min-width: 0; line-height: 1.55; }
 .panel-footer a { color: #b0bac5; text-decoration: none; }
+.footer-links { display: inline-flex; align-items: center; justify-content: flex-end; gap: 12px; white-space: nowrap; }
+.footer-links a { display: inline-flex; }
 .loading-row { min-height: 320px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--muted); text-align: center; }
 .loading-row span { width: 22px; height: 22px; border: 2px solid var(--line); border-top-color: var(--acid); border-radius: 50%; animation: spin .8s linear infinite; }
 .loading-row p { font: 400 8px/1.5 var(--mono); text-transform: uppercase; }
@@ -414,9 +427,12 @@ dialog p:not(.eyebrow) { color: #aab5c1; font-size: 11px; line-height: 1.75; }
   .calendar-day-label { position: static; top: auto; z-index: 1; margin-top: 4px; padding-top: 12px; }
   .calendar-day-group:first-child .calendar-day-label { margin-top: 0; }
   .calendar-item { grid-template-columns: 50px minmax(0, 1fr); gap: 10px; align-items: start; }
+  .holiday-item { grid-template-columns: 50px minmax(0, 1fr); gap: 10px; align-items: start; }
+  .holiday-badge { grid-column: 2; justify-self: start; }
   .calendar-copy { min-width: 0; }
-  .calendar-copy h3, .calendar-copy p { overflow-wrap: anywhere; }
+  .calendar-copy h3, .calendar-copy p, .holiday-copy h3, .holiday-copy p { overflow-wrap: anywhere; }
   .calendar-item .impact { grid-column: 2; }
+  .footer-links { justify-content: flex-start; flex-wrap: wrap; white-space: normal; }
   .principle-strip { align-items: stretch; flex-direction: row; flex-wrap: wrap; gap: 10px; }
   .principle-strip > span { display: none; }
   .principle-strip p { flex: 1 1 100%; }

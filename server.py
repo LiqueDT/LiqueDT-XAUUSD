@@ -34,9 +34,15 @@ NEWS_FEEDS = (
     ("https://www.fxstreet.com/rss/news", "FXStreet"),
     ("https://news.google.com/rss/search?q=%28gold%20OR%20XAUUSD%29%20%28Fed%20OR%20dollar%20OR%20Trump%20OR%20tariff%20OR%20geopolitical%29&hl=en-US&gl=US&ceid=US%3Aen", "Google News"),
 )
-CALENDAR_URLS = (
+CALENDAR_JSON_URLS = (
+    "https://nfs.faireconomy.media/ff_calendar_thisweek.json",
+)
+CALENDAR_XML_URLS = (
     "https://nfs.faireconomy.media/ff_calendar_thisweek.xml",
 )
+FOREX_FACTORY_THIS_WEEK_URL = "https://www.forexfactory.com/calendar?week=this"
+FOREX_FACTORY_MORE_URL = "https://www.forexfactory.com/calendar?week=next"
+CALENDAR_READER_OFFSETS = (0, 1, 2)
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36 LiqueDT/1.7"
 GOLD_TERMS = (
     "gold", "xau", "dollar", "usd", "fed", "fomc", "powell", "yield", "treasury",
@@ -536,6 +542,24 @@ def new_york_timezone(local_date: datetime):
     return timezone(timedelta(hours=-4 if dst_start <= local_date < dst_end else -5))
 
 
+def forex_factory_week_slug(day: datetime) -> str:
+    return f"{day.strftime('%b').lower()}{day.day}.{day.year}"
+
+
+def forex_factory_week_urls(now: datetime) -> list[str]:
+    eastern_now = now.astimezone(new_york_timezone(now.replace(tzinfo=None)))
+    monday = (eastern_now - timedelta(days=eastern_now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+    urls = [FOREX_FACTORY_THIS_WEEK_URL, FOREX_FACTORY_MORE_URL]
+    for offset in CALENDAR_READER_OFFSETS:
+        anchor = monday + timedelta(days=7 * offset)
+        urls.append(f"https://www.forexfactory.com/calendar?week={forex_factory_week_slug(anchor)}")
+    return list(dict.fromkeys(urls))
+
+
+def forex_factory_reader_url(source_url: str) -> str:
+    return f"https://r.jina.ai/http://{source_url}"
+
+
 def parse_calendar_datetime(date_text: str, time_text: str) -> str | None:
     if not date_text or not time_text or time_text.lower() in {"all day", "tentative"}:
         return None
@@ -561,6 +585,24 @@ def parse_calendar_datetime(date_text: str, time_text: str) -> str | None:
     # Forex Factory's public XML feed timestamps are UTC; the UI converts UTC to SGT.
     utc_time = parsed_date.replace(hour=parsed_time.hour, minute=parsed_time.minute, tzinfo=timezone.utc)
     return utc_time.isoformat()
+
+
+READER_MONTHS = {name: index for index, name in enumerate(("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"), start=1)}
+READER_DATE_RE = re.compile(r"^(?:Sun|Mon|Tue|Wed|Thu|Fri|Sat)\s+([A-Za-z]{3})\s+(\d{1,2})$", re.I)
+READER_TIME_RE = re.compile(r"^(?:\d{1,2}:\d{2}|\d{1,2})(?:am|pm)$", re.I)
+READER_CURRENCY_RE = re.compile(r"^[A-Z]{3}$")
+
+
+def parse_calendar_instant(date_text: str) -> str | None:
+    if not date_text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(date_text).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc).isoformat()
 
 
 def parse_event_number(value: str | None) -> float | None:
@@ -622,6 +664,183 @@ def calendar_relevance(title: str) -> tuple[str, str] | None:
     return None
 
 
+def clean_reader_cell(cell: str) -> str:
+    text = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", cell or "")
+    text = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", text)
+    text = html.unescape(re.sub(r"\s+", " ", text)).strip()
+    return text.replace("Open Detail", "").replace("Open Graph", "").strip()
+
+
+def reader_impact(cell: str) -> str:
+    lower = (cell or "").lower()
+    if "ff-impact-red" in lower:
+        return "High"
+    if "ff-impact-ora" in lower:
+        return "Medium"
+    if "ff-impact-yel" in lower:
+        return "Low"
+    if "ff-impact-gra" in lower:
+        return "Holiday"
+    return ""
+
+
+def is_reader_time(value: str) -> bool:
+    text = (value or "").strip()
+    return bool(READER_TIME_RE.match(text)) or text.lower() in {"all day", "tentative"}
+
+
+def reader_event_time(date_label: str, time_text: str, now: datetime) -> str | None:
+    if not date_label or not time_text or time_text.lower() in {"all day", "tentative"}:
+        return None
+    date_match = READER_DATE_RE.match(date_label.strip())
+    if not date_match or not READER_TIME_RE.match(time_text.strip()):
+        return None
+    month = READER_MONTHS.get(date_match.group(1).title())
+    if not month:
+        return None
+    day = int(date_match.group(2))
+    year = now.year
+    if month < now.month - 6:
+        year += 1
+    elif month > now.month + 6:
+        year -= 1
+    compact_time = time_text.lower().replace(" ", "")
+    parsed_time = None
+    for pattern in ("%I:%M%p", "%I%p"):
+        try:
+            parsed_time = datetime.strptime(compact_time, pattern)
+            break
+        except ValueError:
+            continue
+    if parsed_time is None:
+        return None
+    local_time = datetime(year, month, day, parsed_time.hour, parsed_time.minute, tzinfo=new_york_timezone(datetime(year, month, day)))
+    return local_time.astimezone(timezone.utc).isoformat()
+
+
+def reader_value_cells(cells: list[str]) -> list[str]:
+    values: list[str] = []
+    for cell in cells:
+        text = clean_reader_cell(cell)
+        if not text or text.lower() in {"actual", "forecast", "previous", "graph"}:
+            continue
+        if re.fullmatch(r"Image\s+\d+", text, re.I):
+            continue
+        values.append(text)
+    return values
+
+
+def append_reader_calendar(markdown: str, source_url: str, events: list[dict[str, Any]], seen_events: set[tuple[str, str, str]], now: datetime) -> None:
+    current_date = ""
+    last_time = ""
+    for line in markdown.splitlines():
+        if not line.lstrip().startswith("|"):
+            continue
+        cells = [part.strip() for part in line.strip().strip("|").split("|")]
+        if not cells or all(not cell or set(cell) <= {"-", " "} for cell in cells):
+            continue
+        first = clean_reader_cell(cells[0])
+        if first in {"Date", "---"} or first.endswith("Actual"):
+            continue
+        if len(cells) == 1 and READER_DATE_RE.match(first):
+            current_date = first
+            last_time = ""
+            continue
+        idx = 0
+        date_label = current_date
+        time_text = ""
+        if READER_DATE_RE.match(first):
+            date_label = first
+            current_date = first
+            idx = 1
+            if idx < len(cells) and is_reader_time(clean_reader_cell(cells[idx])):
+                time_text = clean_reader_cell(cells[idx])
+                last_time = time_text
+                idx += 1
+            elif idx >= len(cells) or not READER_CURRENCY_RE.match(clean_reader_cell(cells[idx])):
+                continue
+        elif is_reader_time(first):
+            time_text = first
+            last_time = time_text
+            idx = 1
+        elif READER_CURRENCY_RE.match(first):
+            time_text = last_time
+            idx = 0
+        elif first == "" and len(cells) > 1:
+            second = clean_reader_cell(cells[1])
+            if READER_CURRENCY_RE.match(second):
+                time_text = last_time
+                idx = 1
+            elif is_reader_time(second):
+                time_text = second
+                last_time = time_text
+                idx = 2
+            else:
+                continue
+        else:
+            continue
+        if idx + 2 >= len(cells):
+            continue
+        country = clean_reader_cell(cells[idx])
+        impact = reader_impact(cells[idx + 1])
+        title = clean_reader_cell(cells[idx + 2])
+        values = reader_value_cells(cells[idx + 3:])
+        forecast = values[0] if values else ""
+        previous = values[1] if len(values) > 1 else ""
+        append_calendar_event(events, seen_events, now, title, country, impact, reader_event_time(date_label, time_text, now), "", forecast, previous, source_url)
+
+
+def append_calendar_event(
+    events: list[dict[str, Any]],
+    seen_events: set[tuple[str, str, str]],
+    now: datetime,
+    title: str,
+    country: str,
+    impact: str,
+    event_time: str | None,
+    actual: str,
+    forecast: str,
+    previous: str,
+    source_url: str,
+) -> None:
+    country = (country or "").upper()
+    impact = (impact or "").title()
+    if country != "USD" or impact not in {"High", "Medium"}:
+        return
+    title = html.unescape(title or "").strip()
+    relevance = calendar_relevance(title)
+    if relevance is None:
+        return
+    actual = actual or ""
+    forecast = forecast or ""
+    previous = previous or ""
+    if event_time:
+        parsed = datetime.fromisoformat(event_time)
+        if parsed < now - timedelta(hours=1):
+            return
+    event_key = (title, event_time or "", actual)
+    if event_key in seen_events:
+        return
+    seen_events.add(event_key)
+    result = calendar_result_effect(title, actual, forecast, previous)
+    events.append({
+        "title": title,
+        "country": country,
+        "impact": impact,
+        "gold_relevance": relevance[0],
+        "gold_reason": relevance[1],
+        "time_utc": event_time,
+        "actual": actual,
+        "forecast": forecast,
+        "previous": previous,
+        "result_status": result["status"],
+        "result_bias": result["bias"],
+        "result_score": result["score"],
+        "result_reason": result["reason"],
+        "url": safe_external_url(source_url, FOREX_FACTORY_THIS_WEEK_URL),
+    })
+
+
 def calendar_pulse(events: list[dict[str, Any]]) -> dict[str, Any]:
     released = [event for event in events if event.get("result_status") == "released" and event.get("result_bias") in {"bullish", "bearish"}]
     released.sort(key=lambda event: event.get("time_utc") or "", reverse=True)
@@ -634,66 +853,77 @@ def calendar_pulse(events: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def load_calendar() -> dict[str, Any]:
-    roots: list[ET.Element] = []
     errors: list[str] = []
-    for url in CALENDAR_URLS:
-        try:
-            roots.append(ET.fromstring(fetch_bytes(url)))
-        except (OSError, ValueError, ET.ParseError, urllib.error.URLError) as exc:
-            errors.append(f"{url}: {type(exc).__name__}")
-    if not roots:
-        raise ValueError("; ".join(errors) or "Calendar feeds unavailable")
-
+    loaded = False
     now = datetime.now(timezone.utc)
     events: list[dict[str, Any]] = []
     seen_events: set[tuple[str, str, str]] = set()
-    for root in roots:
-        for node in root.findall(".//event"):
-            country = text_of(node, "country").upper()
-            impact = text_of(node, "impact").title()
-            if country != "USD" or impact not in {"High", "Medium"}:
-                continue
-            title = html.unescape(text_of(node, "title"))
-            relevance = calendar_relevance(title)
-            if relevance is None:
-                continue
-            event_time = parse_calendar_datetime(text_of(node, "date"), text_of(node, "time"))
-            actual = text_of(node, "actual")
-            forecast = text_of(node, "forecast")
-            previous = text_of(node, "previous")
-            if event_time:
-                parsed = datetime.fromisoformat(event_time)
-                keep_recent_result = bool(actual) and parsed >= now - timedelta(hours=36)
-                if parsed < now - timedelta(hours=3) and not keep_recent_result:
+
+    for url in CALENDAR_JSON_URLS:
+        try:
+            payload = json.loads(fetch_bytes(url).decode("utf-8"))
+            if not isinstance(payload, list):
+                raise ValueError("Calendar JSON root was not a list")
+            loaded = True
+            for item in payload:
+                if not isinstance(item, dict):
                     continue
-            event_key = (title, event_time or "", actual)
-            if event_key in seen_events:
-                continue
-            seen_events.add(event_key)
-            result = calendar_result_effect(title, actual, forecast, previous)
-            events.append({
-                "title": title,
-                "country": country,
-                "impact": impact,
-                "gold_relevance": relevance[0],
-                "gold_reason": relevance[1],
-                "time_utc": event_time,
-                "actual": actual,
-                "forecast": forecast,
-                "previous": previous,
-                "result_status": result["status"],
-                "result_bias": result["bias"],
-                "result_score": result["score"],
-                "result_reason": result["reason"],
-                "url": safe_external_url(text_of(node, "url"), "https://www.forexfactory.com/calendar"),
-            })
+                append_calendar_event(
+                    events,
+                    seen_events,
+                    now,
+                    str(item.get("title") or ""),
+                    str(item.get("country") or ""),
+                    str(item.get("impact") or ""),
+                    parse_calendar_instant(str(item.get("date") or "")),
+                    str(item.get("actual") or ""),
+                    str(item.get("forecast") or ""),
+                    str(item.get("previous") or ""),
+                    str(item.get("url") or FOREX_FACTORY_THIS_WEEK_URL),
+                )
+        except (OSError, ValueError, json.JSONDecodeError, urllib.error.URLError) as exc:
+            errors.append(f"{url}: {type(exc).__name__}")
+
+    for url in CALENDAR_XML_URLS:
+        try:
+            root = ET.fromstring(fetch_bytes(url))
+            loaded = True
+            for node in root.findall(".//event"):
+                append_calendar_event(
+                    events,
+                    seen_events,
+                    now,
+                    text_of(node, "title"),
+                    text_of(node, "country"),
+                    text_of(node, "impact"),
+                    parse_calendar_datetime(text_of(node, "date"), text_of(node, "time")),
+                    text_of(node, "actual"),
+                    text_of(node, "forecast"),
+                    text_of(node, "previous"),
+                    text_of(node, "url") or FOREX_FACTORY_THIS_WEEK_URL,
+                )
+        except (OSError, ValueError, ET.ParseError, urllib.error.URLError) as exc:
+            errors.append(f"{url}: {type(exc).__name__}")
+
+    for source_url in forex_factory_week_urls(now):
+        reader_url = forex_factory_reader_url(source_url)
+        try:
+            markdown = fetch_bytes(reader_url, timeout=30).decode("utf-8", errors="ignore")
+            loaded = True
+            append_reader_calendar(markdown, source_url, events, seen_events, now)
+        except (OSError, ValueError, urllib.error.URLError, UnicodeDecodeError) as exc:
+            errors.append(f"{reader_url}: {type(exc).__name__}")
+
+    if not loaded:
+        raise ValueError("; ".join(errors) or "Calendar feeds unavailable")
+
     events.sort(key=lambda event: (event["time_utc"] is None, event["time_utc"] or "9999"))
-    if not events:
-        raise ValueError("No upcoming or fresh USD calendar events in feed")
-    selected = events[:14]
+    selected = events[:18]
     return {
         "ok": True,
-        "source": "Forex Factory calendar feed (UTC feed time, displayed in SGT)",
+        "source": "ForexFactory current-week feed plus rolling weekly calendar reader",
+        "more_url": FOREX_FACTORY_MORE_URL,
+        "warning": "; ".join(errors) if errors else None,
         "updated_at": now.isoformat(),
         "events": selected,
         "pulse": calendar_pulse(selected),
@@ -740,7 +970,7 @@ class LiqueDTHandler(SimpleHTTPRequestHandler):
             "default-src 'self'; script-src 'self' https://s3.tradingview.com; "
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
             "font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; "
-            "frame-src https://s.tradingview.com https://www.tradingview.com https://www.tradingview-widget.com; "
+            "frame-src https://s.tradingview.com https://www.tradingview.com https://www.tradingview-widget.com https://formsubmit.co; "
             "connect-src 'self' https://*.tradingview.com wss://*.tradingview.com; "
             "form-action 'self' https://formsubmit.co",
         )

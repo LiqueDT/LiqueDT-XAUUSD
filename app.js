@@ -3,6 +3,7 @@
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
 const SINGAPORE_TZ = "Asia/Singapore";
+const GOLD_HOLIDAY_TZ = "America/Chicago";
 const formatterCache = new Map();
 
 const sessions = [
@@ -36,6 +37,7 @@ let latestNewsPulse = null;
 let latestCalendar = null;
 let latestCalendarPulse = null;
 let latestStaticBuild = null;
+let holidayRenderKey = "";
 const WIDGETS_DISABLED = new URLSearchParams(location.search).has("no-widgets");
 const healthState = { market: "checking", charts: "checking", news: "checking", calendar: "checking" };
 const healthMeta = { market: null, charts: null, news: null, calendar: null };
@@ -86,6 +88,141 @@ function zonedDateTimeToUtc(year, month, day, hour, minute, timeZone) {
 function calendarDate(parts, offsetDays = 0) {
   const date = new Date(Date.UTC(parts.year, parts.month - 1, parts.day + offsetDays));
   return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate(), weekday: date.getUTCDay() };
+}
+
+function nthWeekdayOfMonth(year, month, weekday, n) {
+  const first = calendarDate({ year, month, day: 1 });
+  const offset = (weekday - first.weekday + 7) % 7;
+  return calendarDate({ year, month, day: 1 + offset + (n - 1) * 7 });
+}
+
+function lastWeekdayOfMonth(year, month, weekday) {
+  const last = calendarDate({ year, month: month + 1, day: 0 });
+  const offset = (last.weekday - weekday + 7) % 7;
+  return calendarDate(last, -offset);
+}
+
+function observedFixedHoliday(year, month, day) {
+  const holiday = calendarDate({ year, month, day });
+  if (holiday.weekday === 6) return calendarDate(holiday, -1);
+  if (holiday.weekday === 0) return calendarDate(holiday, 1);
+  return holiday;
+}
+
+function easterSunday(year) {
+  const a = year % 19;
+  const b = Math.floor(year / 100);
+  const c = year % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31);
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  return calendarDate({ year, month, day });
+}
+
+function isWeekday(parts) {
+  return parts.weekday >= 1 && parts.weekday <= 5;
+}
+
+function sameYmd(a, b) {
+  return a && b && a.year === b.year && a.month === b.month && a.day === b.day;
+}
+
+function goldHolidayDate(parts, hour = 0, minute = 0) {
+  return zonedDateTimeToUtc(parts.year, parts.month, parts.day, hour, minute, GOLD_HOLIDAY_TZ);
+}
+
+function goldHolidayEventsForYear(year) {
+  const thanksgiving = nthWeekdayOfMonth(year, 11, 4, 4);
+  const events = [
+    { name: "New Year's Day", type: "closed", parts: observedFixedHoliday(year, 1, 1) },
+    { name: "Martin Luther King Jr. Day", type: "closed", parts: nthWeekdayOfMonth(year, 1, 1, 3) },
+    { name: "Presidents' Day", type: "closed", parts: nthWeekdayOfMonth(year, 2, 1, 3) },
+    { name: "Good Friday", type: "closed", parts: calendarDate(easterSunday(year), -2) },
+    { name: "Memorial Day", type: "closed", parts: lastWeekdayOfMonth(year, 5, 1) },
+    { name: "Juneteenth", type: "closed", parts: observedFixedHoliday(year, 6, 19) },
+    { name: "Independence Day", type: "closed", parts: observedFixedHoliday(year, 7, 4) },
+    { name: "Labor Day", type: "closed", parts: nthWeekdayOfMonth(year, 9, 1, 1) },
+    { name: "Thanksgiving Day", type: "closed", parts: thanksgiving },
+    { name: "Black Friday adjusted hours", type: "adjusted", parts: calendarDate(thanksgiving, 1) },
+    { name: "Christmas Eve adjusted hours", type: "adjusted", parts: calendarDate({ year, month: 12, day: 24 }) },
+    { name: "Christmas Day", type: "closed", parts: observedFixedHoliday(year, 12, 25) },
+    { name: "New Year's Eve adjusted hours", type: "adjusted", parts: calendarDate({ year, month: 12, day: 31 }) }
+  ];
+  const independenceEve = calendarDate({ year, month: 7, day: 3 });
+  if (isWeekday(independenceEve)) {
+    events.push({ name: "Independence Day holiday period", type: "adjusted", parts: independenceEve });
+  }
+  return events.filter(event => isWeekday(event.parts));
+}
+
+function upcomingGoldHolidays(now = new Date(), limit = 8) {
+  const cmeNow = zonedParts(now, GOLD_HOLIDAY_TZ);
+  const events = [];
+  for (const year of [cmeNow.year - 1, cmeNow.year, cmeNow.year + 1]) {
+    goldHolidayEventsForYear(year).forEach(event => {
+      const start = goldHolidayDate(event.parts, 0, 0);
+      const end = goldHolidayDate(event.parts, 23, 59);
+      if (end >= new Date(now.getTime() - 3600000) || sameYmd(event.parts, cmeNow)) {
+        events.push({ ...event, start, end, key: `${event.parts.year}-${event.parts.month}-${event.parts.day}-${event.type}-${event.name}` });
+      }
+    });
+  }
+  return [...new Map(events.map(event => [event.key, event])).values()]
+    .sort((a, b) => a.start - b.start)
+    .slice(0, limit);
+}
+
+function goldHolidayState(event, now = new Date()) {
+  const cmeNow = zonedParts(now, GOLD_HOLIDAY_TZ);
+  if (sameYmd(event.parts, cmeNow)) return "today";
+  if (event.start <= now && now < event.end) return "active";
+  return "upcoming";
+}
+
+function goldHolidaySgtLabel(event) {
+  const cmeDate = formatter(GOLD_HOLIDAY_TZ, { weekday: "short", day: "2-digit", month: "short", year: "numeric" }).format(event.start);
+  const sgtDate = formatter(SINGAPORE_TZ, { weekday: "short", day: "2-digit", month: "short", year: "numeric" }).format(event.start);
+  return `${cmeDate} CT / ${sgtDate} SGT`;
+}
+
+function renderHolidayCalendar(now = new Date()) {
+  const list = $("#holidayList");
+  const status = $("#holidayStatus");
+  if (!list || !status) return;
+  const events = upcomingGoldHolidays(now, 8);
+  if (!events.length) {
+    status.className = "source-status delayed";
+    status.textContent = "NO UPCOMING";
+    list.innerHTML = '<div class="empty-feed">No upcoming gold market holidays were found in the generated schedule.</div>';
+    return;
+  }
+  const current = events.find(event => goldHolidayState(event, now) === "today" || goldHolidayState(event, now) === "active");
+  status.className = `source-status ${current ? "delayed" : "live"}`;
+  status.textContent = current ? "HOLIDAY NOW" : "LOCAL SCHEDULE";
+  status.title = "Indicative CME Globex metals holiday calendar; broker spot/CFD hours may differ.";
+  const renderKey = events.map(event => `${event.key}:${goldHolidayState(event, now)}`).join("|");
+  if (renderKey === holidayRenderKey) return;
+  holidayRenderKey = renderKey;
+  list.innerHTML = events.map(event => {
+    const state = goldHolidayState(event, now);
+    const badge = state === "today" ? "TODAY" : event.type === "adjusted" ? "ADJUSTED" : "CLOSED";
+    const note = event.type === "adjusted"
+      ? "CME Globex metals may run adjusted hours; XAUUSD spot/CFD liquidity can thin or differ by broker."
+      : "CME Globex metals holiday schedule; XAUUSD spot/CFD availability can still vary by broker.";
+    return `<article class="holiday-item ${escapeHtml(event.type)} ${escapeHtml(state)}">
+      <div class="holiday-date"><strong>${escapeHtml(formatter(SINGAPORE_TZ, { day: "2-digit", month: "short" }).format(event.start))}</strong><small>SGT</small></div>
+      <div class="holiday-copy"><h3>${escapeHtml(event.name)}</h3><p>${escapeHtml(goldHolidaySgtLabel(event))}</p><p>${escapeHtml(note)}</p></div>
+      <span class="holiday-badge ${escapeHtml(event.type)} ${escapeHtml(state)}">${escapeHtml(badge)}</span>
+    </article>`;
+  }).join("");
 }
 
 function countdown(milliseconds) {
@@ -178,6 +315,7 @@ function updateClocks() {
     hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23"
   }).format(now);
   $("#sgDate").textContent = `${formatter(SINGAPORE_TZ, { weekday: "short", day: "2-digit", month: "short" }).format(now)} · SGT`;
+  renderHolidayCalendar(now);
 
   const market = goldMarketState(now);
   $("#marketState").textContent = market.open ? "XAUUSD open" : "XAUUSD closed";
@@ -193,7 +331,7 @@ function updateClocks() {
     card.querySelector(".session-status").textContent = state.open ? "OPEN NOW" : "CLOSED";
     card.querySelector(".session-timer strong").textContent = countdown(state.target - now);
     card.querySelector(".session-timer small").textContent = state.open ? "Until close" : "Until open";
-    card.querySelector(".session-local-time")?.replaceChildren(`${state.openSg}â€“${state.closeSg} SGT`);
+    card.querySelector(".session-local-time")?.replaceChildren(`${state.openSg}-${state.closeSg} SGT`);
   });
 }
 
@@ -475,6 +613,12 @@ function eventDayLong(value) {
   return relative === "Today" || relative === "Tomorrow" ? `${relative} · ${full}` : full;
 }
 
+function isCalendarEventActive(event, graceMinutes = 60) {
+  if (!event?.time_utc) return true;
+  const date = timestamp(event.time_utc);
+  return !date || date.getTime() >= Date.now() - graceMinutes * 60000;
+}
+
 function sentiment(score) {
   const value = Math.max(-1, Math.min(1, Number(score) || 0));
   if (value >= .18) return { key: "bullish", label: "Bullish", phrase: "leans bullish" };
@@ -633,27 +777,15 @@ function renderTotalPulse() {
 
 function renderCalendar(payload) {
   const status = $("#calendarStatus");
-  if (!payload.ok || !payload.events?.length) {
+  if (!payload?.ok) {
     latestCalendar = null;
     latestCalendarPulse = null;
-    if (!WIDGETS_DISABLED) {
-      status.className = "source-status delayed";
-      status.textContent = "LIVE BACKUP";
-      status.title = "Primary calendar feed is unavailable; TradingView calendar widget is loaded as a backup.";
-      setHealth("calendar", "delayed", "Backup", { summary: "Calendar: live backup widget", detail: status.title });
-      $("#calendarFreshnessNote").textContent = "Live backup widget · USD high/medium impact";
-      mountWidget($("#calendarList"), "embed-widget-events.js", {
-        colorTheme: "dark", isTransparent: true, width: "100%", height: 385,
-        locale: "en", importanceFilter: "0,1", countryFilter: "us"
-      });
-    } else {
-      status.className = "source-status offline";
-      status.textContent = "UNAVAILABLE";
-      status.title = "Calendar feed is unavailable.";
-      setHealth("calendar", "offline", "Unavailable", null);
-      $("#calendarFreshnessNote").textContent = "Calendar feed unavailable";
-      $("#calendarList").innerHTML = '<div class="empty-feed">The calendar feed is unavailable right now. Use the full calendar link below before making time-sensitive decisions.</div>';
-    }
+    status.className = "source-status offline";
+    status.textContent = "NO FEED";
+    status.title = "Parsed ForexFactory calendar feed is unavailable. LiqueDT no longer switches this section to a widget fallback.";
+    setHealth("calendar", "offline", "No feed", { summary: "Calendar: parsed feed unavailable", detail: status.title });
+    $("#calendarFreshnessNote").textContent = "Parsed ForexFactory calendar unavailable - use the source links below for a direct check";
+    $("#calendarList").innerHTML = '<div class="empty-feed">Parsed ForexFactory calendar could not be loaded. Use the ForexFactory links below for a direct check.</div>';
     renderTotalPulse();
     return false;
   }
@@ -665,9 +797,17 @@ function renderCalendar(payload) {
   status.textContent = freshness.badge;
   status.title = freshness.detail;
   setHealth("calendar", backup ? "delayed" : "live", freshness.health, freshness);
-  $("#calendarFreshnessNote").textContent = `${freshness.footer} - Forex Factory UTC feed -> SGT display - USD high/medium impact`;
+  $("#calendarFreshnessNote").textContent = `${freshness.footer} - USD high/medium impact`;
+  const moreLink = $("#calendarMoreLink");
+  if (moreLink && payload.more_url) moreLink.href = payload.more_url;
   const groups = new Map();
-  payload.events.slice(0, 12).forEach(event => {
+  const calendarEvents = (Array.isArray(payload.events) ? payload.events : []).filter(event => isCalendarEventActive(event, 60));
+  if (!calendarEvents.length) {
+    $("#calendarList").innerHTML = '<div class="empty-feed">No upcoming or recently released XAUUSD-relevant USD high/medium events are listed in the current ForexFactory snapshot. Events are removed about 1 hour after release. Use More dates below to open the expanded ForexFactory calendar.</div>';
+    renderTotalPulse();
+    return true;
+  }
+  calendarEvents.slice(0, 18).forEach(event => {
     const key = event.time_utc
       ? formatter(SINGAPORE_TZ, { year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(event.time_utc))
       : "TBC";
