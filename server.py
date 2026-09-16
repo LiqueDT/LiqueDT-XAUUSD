@@ -718,6 +718,60 @@ def reader_event_time(date_label: str, time_text: str, now: datetime) -> str | N
     return local_time.astimezone(timezone.utc).isoformat()
 
 
+def official_release_time_for_title(title: str) -> tuple[int, int] | None:
+    """Return the official U.S. Eastern release clock for common macro events.
+
+    ForexFactory reader pages can occasionally emit a stale or shifted time for
+    future weeks. Keep the event date from the feed, but normalize the clock for
+    scheduled U.S. macro releases against their standard official release times.
+    """
+    normalized = re.sub(r"\s+", " ", (title or "").lower()).strip()
+    if not normalized:
+        return None
+    if any(term in normalized for term in ("fomc press conference", "fed press conference")):
+        return 14, 30
+    if any(term in normalized for term in ("federal funds rate", "fomc statement", "fomc economic projections", "fomc meeting minutes")):
+        return 14, 0
+    if any(term in normalized for term in ("unemployment claims", "jobless claims", "initial claims")):
+        return 8, 30
+    if "adp" in normalized:
+        return 8, 15
+    if any(term in normalized for term in ("non-farm", "nonfarm", "unemployment rate", "average hourly earnings", "employment situation")):
+        return 8, 30
+    if any(term in normalized for term in ("core cpi", " cpi", "cpi ", "consumer price index", "core pce", "pce price", "personal income", "personal spending", "ppi", "producer price index", "retail sales", "gdp", "durable goods", "goods trade balance", "trade balance", "advance goods trade", "import price", "export price")):
+        return 8, 30
+    if any(term in normalized for term in ("philly fed", "philadelphia fed", "empire state", "housing starts", "building permits")):
+        return 8, 30
+    if any(term in normalized for term in ("flash manufacturing pmi", "flash services pmi", "s&p global", "global manufacturing pmi", "global services pmi")):
+        return 9, 45
+    if "industrial production" in normalized or "capacity utilization" in normalized:
+        return 9, 15
+    if any(term in normalized for term in ("s&p/cs", "case-shiller", "house price index", " hpi")):
+        return 9, 0
+    if any(term in normalized for term in ("jolts", "job openings", "ism manufacturing", "ism services", "ism non-manufacturing", "consumer confidence", "consumer sentiment", "uom", "michigan consumer", "inflation expectations", "new home sales", "pending home sales", "factory orders", "construction spending", "business inventories", "wholesale inventories", "richmond manufacturing", "richmond fed")):
+        return 10, 0
+    if "dallas fed" in normalized:
+        return 10, 30
+    return None
+
+
+def normalize_calendar_event_time(title: str, event_time: str | None) -> str | None:
+    if not event_time:
+        return event_time
+    release_time = official_release_time_for_title(title)
+    if release_time is None:
+        return event_time
+    try:
+        parsed = datetime.fromisoformat(event_time)
+    except ValueError:
+        return event_time
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    eastern = parsed.astimezone(new_york_timezone(parsed.replace(tzinfo=None)))
+    hour, minute = release_time
+    local_release = datetime(eastern.year, eastern.month, eastern.day, hour, minute, tzinfo=new_york_timezone(datetime(eastern.year, eastern.month, eastern.day)))
+    return local_release.astimezone(timezone.utc).isoformat()
+
 def reader_value_cells(cells: list[str]) -> list[str]:
     values: list[str] = []
     for cell in cells:
@@ -811,6 +865,7 @@ def append_calendar_event(
     relevance = calendar_relevance(title)
     if relevance is None:
         return
+    event_time = normalize_calendar_event_time(title, event_time)
     actual = actual or ""
     forecast = forecast or ""
     previous = previous or ""
@@ -839,6 +894,68 @@ def append_calendar_event(
         "result_reason": result["reason"],
         "url": safe_external_url(source_url, FOREX_FACTORY_THIS_WEEK_URL),
     })
+
+
+def _calendar_event_time(event: dict[str, Any]) -> datetime | None:
+    value = event.get("time_utc")
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def _same_calendar_event(left: dict[str, Any], right: dict[str, Any]) -> bool:
+    if (left.get("title") or "").strip().casefold() != (right.get("title") or "").strip().casefold():
+        return False
+    if (left.get("country") or "").strip().upper() != (right.get("country") or "").strip().upper():
+        return False
+    left_time = _calendar_event_time(left)
+    right_time = _calendar_event_time(right)
+    if left_time and right_time:
+        if abs(left_time - right_time) > timedelta(minutes=90):
+            return False
+    elif bool(left_time) != bool(right_time):
+        return False
+    left_actual = (left.get("actual") or "").strip()
+    right_actual = (right.get("actual") or "").strip()
+    if left_actual and right_actual and left_actual.casefold() != right_actual.casefold():
+        return False
+    return True
+
+
+def dedupe_calendar_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Remove duplicate feed/reader events, including DST-offset copies.
+
+    The official ForexFactory JSON feed is loaded first and carries timezone-aware
+    timestamps. The rolling reader is only a fallback/extension, and can sometimes
+    expose the same event with a one-hour offset around DST. Keep the first copy
+    and use later copies only to fill missing values.
+    """
+    unique: list[dict[str, Any]] = []
+    for event in events:
+        duplicate = next((item for item in unique if _same_calendar_event(item, event)), None)
+        if duplicate is None:
+            unique.append(event)
+            continue
+        for field in ("actual", "forecast", "previous"):
+            if not duplicate.get(field) and event.get(field):
+                duplicate[field] = event[field]
+        if not duplicate.get("time_utc") and event.get("time_utc"):
+            duplicate["time_utc"] = event["time_utc"]
+        result = calendar_result_effect(
+            str(duplicate.get("title") or ""),
+            str(duplicate.get("actual") or ""),
+            str(duplicate.get("forecast") or ""),
+            str(duplicate.get("previous") or ""),
+        )
+        duplicate["result_status"] = result["status"]
+        duplicate["result_bias"] = result["bias"]
+        duplicate["result_score"] = result["score"]
+        duplicate["result_reason"] = result["reason"]
+    return unique
 
 
 def calendar_pulse(events: list[dict[str, Any]]) -> dict[str, Any]:
@@ -917,6 +1034,7 @@ def load_calendar() -> dict[str, Any]:
     if not loaded:
         raise ValueError("; ".join(errors) or "Calendar feeds unavailable")
 
+    events = dedupe_calendar_events(events)
     events.sort(key=lambda event: (event["time_utc"] is None, event["time_utc"] or "9999"))
     selected = events[:18]
     return {
